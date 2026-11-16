@@ -6,9 +6,10 @@ Outside contributions are welcome.
 
 - Open an issue first for anything bigger than a bug fix or a small correction, so the approach can be
   agreed before you write it.
-- Read [AGENTS.md](AGENTS.md) for the layout and the constraints (Bun only, TypeScript strict, no
-  barrel files, types in `types.ts`), and [docs/decision/](docs/decision/README.md) for why the code is
-  shaped the way it is.
+- Read [DEVELOPMENT.md](DEVELOPMENT.md) for building, testing and the guest image.
+- Read [AGENTS.md](AGENTS.md) for the layout and the constraints (Bun only, TypeScript strict, no barrel
+  files, types in `types.ts`), and [docs/decision/](docs/decision/README.md) for why the code is shaped
+  the way it is.
 - Run the same gates CI runs:
 
   ```sh

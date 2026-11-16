@@ -69,8 +69,8 @@ Changing a specific area? Jump straight to the relevant record:
 
 ## Not covered here
 
-This directory records decisions, not instructions. For how to run the project see the
-[README](../../README.md); for the endpoint reference see [docs/api.md](../api.md); for how the mechanisms
+This directory records decisions, not instructions. For what the project is see the [README](../../README.md); for building and
+testing it see [DEVELOPMENT.md](../../DEVELOPMENT.md); for the endpoint reference see [docs/api.md](../api.md); for how the mechanisms
 work see [docs/internals.md](../internals.md).
 
 No decision here has been superseded except 0001, which replaced the original Firecracker driver (that

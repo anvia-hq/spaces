@@ -86,7 +86,7 @@ curl -s -H "$K" -H "$J" -X POST $B/sandboxes/bx_xxx/commands -d '{
 command starts _without_ `setsid` dies with it.
 
 **`GET /processes` needs `procps`** in the guest (`ps -o`). Stock `alpine` has only busybox `ps`; use
-the ready guest image — see [Guest image](../README.md#guest-image).
+the ready guest image — see [Guest image](../DEVELOPMENT.md#guest-image).
 
 ## Files
 
@@ -121,7 +121,7 @@ SPACES_NET_RULES='allow@192.168.1.50,allow@100.101.102.103:tcp:5432'
 ```
 
 Rules use msb's grammar `<action>[:<direction>]@<target>[:<proto>[:<ports>]]` and win over the
-profile. See [Networking](../README.md#networking).
+profile. See [Networking](./configuration.md#networking).
 
 ## Snapshots
 
