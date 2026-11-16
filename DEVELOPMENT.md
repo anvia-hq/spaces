@@ -126,6 +126,16 @@ as `user`.
 Every setting has a working default for local development. The full table, the guest network profiles
 and the `SPACES_NET_RULES` grammar are in [docs/configuration.md](docs/configuration.md).
 
+## Git hooks
+
+`bun install` runs the `prepare` script, which lets husky point git at `.husky/`:
+
+- **pre-commit** — `lint`, `format:check`, `typecheck`. A few seconds, no database needed.
+- **pre-push** — the CI steps in CI order: `typecheck`, `lint`, `format:check`, `test:rules`, `test`,
+  `build`. Needs the local Postgres described above.
+
+Skip them deliberately with `SKIP_HOOKS=1 git commit …` or `git push --no-verify`.
+
 ## Before you open a pull request
 
 Run what CI runs — `bun run typecheck`, `bun run lint`, `bun run format:check`, `bun run test:rules`,

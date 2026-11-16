@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# The same steps .github/workflows/ci.yml runs, in the same order, so a push
+# fails here instead of on the pull request. Tests need a local Postgres
+# (see DEVELOPMENT.md); SKIP_HOOKS=1 or `git push --no-verify` skips everything.
+
+[ -n "${SKIP_HOOKS:-}" ] && exit 0
+
+run() {
+  echo "==> $*"
+  "$@" || exit 1
+}
+
+run bun run typecheck
+run bun run lint
+run bun run format:check
+run bun run test:rules
+run bun run test
+run bun run build
