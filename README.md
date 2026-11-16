@@ -101,6 +101,9 @@ Building, testing, the guest image and the schema: **[DEVELOPMENT.md](DEVELOPMEN
 
 Licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE) for attribution.
 
+Built on [microsandbox](https://github.com/superradcompany/microsandbox) (Apache-2.0). See
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for dependency licenses.
+
 A hosted version is available at [anvia.dev](https://anvia.dev), and commercial support and enterprise
 features are available at [hello@anvia.dev](mailto:hello@anvia.dev).
 
