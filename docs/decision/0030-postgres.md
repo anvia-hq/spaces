@@ -21,7 +21,7 @@ That was the right call for one process and one host (decision 0006). Two things
 
 Non-negotiables: the module layout stays, Better Auth keeps working (users, sessions, API keys), the
 operator key keeps working, and no existing sandbox, snapshot, saved snapshot or account may be lost
-on `homelab-rz`.
+on the deployment host.
 
 ## Options
 

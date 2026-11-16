@@ -5,7 +5,7 @@
 
 ## Context
 
-Deploying to a real KVM host (`homelab-rz`: Debian 13, AMD-V, 16 cores, 31 GiB) exposed a gap. The API
+Deploying to a real KVM host (Debian 13, AMD-V, 16 cores, 31 GiB) exposed a gap. The API
 served only `/api/v1` and `/health`; the console is a Vite build whose client uses **relative** `/api`
 paths, so it must be served from the same origin as the API. Nothing in the repository served it.
 
@@ -54,7 +54,7 @@ So the deployment now:
 3. sets `SPACES_PUBLIC_URL=https://<machine>.<tailnet>.ts.net` so signed URLs are minted on the origin
    the browser actually uses.
 
-The result is `https://homelab-rz.tail9a7b40.ts.net` with a trusted certificate, and it covers more than
+The result is `https://<machine>.<tailnet>.ts.net` with a trusted certificate, and it covers more than
 the console: transfer URLs, port previews and snapshot downloads are all served by the API, so every
 link the product hands out is HTTPS and clickable.
 
