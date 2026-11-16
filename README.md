@@ -1,5 +1,7 @@
 # spaces
 
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
+
 **Hardware-isolated microVMs on hardware you control, behind an HTTP API.**
 
 > **Under heavy development.** The API surface, storage layer and console all move quickly; expect
@@ -401,3 +403,15 @@ Before changing the runtime, read [docs/internals.md](./docs/internals.md) for h
 and [docs/decision/](./docs/decision/README.md) for why they are that way. The decision records are
 short and specific: why file operations ride on `exec`, why background commands need `setsid`, why path
 traversal is blocked twice, why snapshots are disk-only, and why a remote `msb` needs an SSH forward.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE) for attribution.
+
+A hosted version is available at [anvia.dev](https://anvia.dev), and commercial support and enterprise
+features are available at [hello@anvia.dev](mailto:hello@anvia.dev).
+
+## Trademarks
+
+"Spaces" and the Anvia name and logos are trademarks of Anvia. The Apache License does not grant
+permission to use them: forks must use a different name and branding.
