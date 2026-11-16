@@ -6,16 +6,35 @@ import { z } from "zod";
  * Only the subset this product actually serves is modelled here.
  */
 
-/** Machine sizes, mirroring boat's `type` enum and its vCPU/RAM/disk shape. */
-export const SandboxType = z.enum(["small", "default", "large", "xlarge"]);
+/**
+ * Machine sizes are operator-owned rows (see /machine-sizes and decision 0034),
+ * so `type` on the wire is a preset name, not a closed enum: a client may only
+ * use one that exists and has not been retired.
+ */
+export const MACHINE_SIZE_NAME = /^[a-z][a-z0-9-]{0,31}$/;
+
+/**
+ * The four presets every deployment starts with (migration 0004). Only the
+ * default name is load-bearing: it is what a create without `type` gets.
+ */
+export const DEFAULT_MACHINE_SIZE = "default";
+
+export const RETIRED_MACHINE_SIZE = "retired_machine_size";
+
+export const SandboxType = z.string().regex(MACHINE_SIZE_NAME);
 export type SandboxType = z.infer<typeof SandboxType>;
 
-export const MACHINE_SIZES = {
-  small: { vcpu: 2, memMib: 4096, diskGb: 51 },
-  default: { vcpu: 4, memMib: 8192, diskGb: 51 },
-  large: { vcpu: 8, memMib: 16384, diskGb: 111 },
-  xlarge: { vcpu: 16, memMib: 32768, diskGb: 251 },
-} as const satisfies Record<SandboxType, { vcpu: number; memMib: number; diskGb: number }>;
+export const MachineSizeSchema = z.object({
+  name: z.string(),
+  vcpu: z.number().int(),
+  memMib: z.number().int(),
+  diskGb: z.number().int(),
+  description: z.string().nullable(),
+  retiredAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type MachineSize = z.infer<typeof MachineSizeSchema>;
 
 /** Boat's `Sandbox.state` enum, verbatim and in order. */
 export const SandboxState = z.enum([
@@ -113,7 +132,7 @@ const CreateHostedPortRequest = z
  */
 export const CreateSandboxRequest = z
   .object({
-    type: SandboxType.default("default"),
+    type: SandboxType.default(DEFAULT_MACHINE_SIZE),
     /** `null` disables auto-stop; the spec also accepts the legacy `"infinite"`. */
     ttlSeconds: z
       .union([z.number().int().min(1).max(2592000), z.literal("infinite"), z.null()])
