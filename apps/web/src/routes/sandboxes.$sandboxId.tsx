@@ -7,6 +7,7 @@ import { DetailSkeleton } from "@/modules/sandboxes/components/detail-skeleton.t
 import { Lifecycle } from "@/modules/sandboxes/components/lifecycle.tsx";
 import { MachinePanel } from "@/modules/sandboxes/components/machine-panel.tsx";
 import { SandboxHeader } from "@/modules/sandboxes/components/sandbox-header.tsx";
+import { useMachineSizes } from "@/modules/sandboxes/hooks/use-machine-sizes.ts";
 import { useSandbox } from "@/modules/sandboxes/hooks/use-sandbox.ts";
 import type { SandboxTab } from "@/modules/sandboxes/types.ts";
 import { FilesPanel } from "@/modules/files/components/files-panel.tsx";
@@ -33,6 +34,7 @@ const TABS: readonly { value: SandboxTab; label: string }[] = [
 function SandboxDetail() {
   const { sandboxId } = Route.useParams();
   const { poll, sandbox, busy, act, remove } = useSandbox(sandboxId);
+  const { byName } = useMachineSizes();
   const [tab, setTab] = useState<SandboxTab>("terminal");
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -65,6 +67,7 @@ function SandboxDetail() {
     <div className="flex flex-col gap-6">
       <SandboxHeader
         sandbox={sandbox}
+        size={byName.get(sandbox.type)}
         busy={busy}
         stale={poll.stale && !poll.error}
         act={act}
@@ -87,7 +90,7 @@ function SandboxDetail() {
         </div>
 
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-[104px] xl:self-start">
-          <MachinePanel sandbox={sandbox} />
+          <MachinePanel sandbox={sandbox} size={byName.get(sandbox.type)} />
           <Lifecycle sandboxId={sandboxId} createdAt={sandbox.createdAt} />
         </aside>
       </div>

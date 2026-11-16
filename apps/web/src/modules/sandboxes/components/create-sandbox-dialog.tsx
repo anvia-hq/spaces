@@ -1,6 +1,5 @@
-import { useState } from "react";
-import type { SandboxType } from "@spaces/shared/sandbox";
-import { MACHINE_SIZES } from "@spaces/shared/sandbox";
+import { useEffect, useState } from "react";
+import type { MachineSize, SandboxType } from "@spaces/shared/sandbox";
 import { Check } from "lucide-react";
 import { Segmented } from "@/components/console/segmented";
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-const TYPES: SandboxType[] = ["small", "default", "large", "xlarge"];
 const TTL_CHOICES = [
   { value: "900", label: "15 min" },
   { value: "3600", label: "1 hour" },
@@ -36,11 +34,13 @@ const TTL_CHOICES = [
 export function CreateSandboxDialog({
   open,
   onOpenChange,
+  sizes,
   busy,
   onCreate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  sizes: MachineSize[];
   busy: boolean;
   onCreate: (input: {
     type: SandboxType;
@@ -48,18 +48,25 @@ export function CreateSandboxDialog({
     name?: string;
   }) => Promise<void>;
 }) {
-  const [type, setType] = useState<SandboxType>("small");
+  const first = sizes[0]?.name;
+  const [type, setType] = useState<SandboxType | undefined>(first);
   const [ttl, setTtl] = useState<string>("3600");
   const [name, setName] = useState("");
 
+  useEffect(() => {
+    if (type && sizes.some((size) => size.name === type)) return;
+
+    setType(first);
+  }, [type, first, sizes]);
+
   function reset() {
-    setType("small");
+    setType(first);
     setTtl("3600");
     setName("");
   }
 
   function submit() {
-    if (busy) return;
+    if (busy || !type) return;
 
     const input: { type: SandboxType; ttlSeconds: number | null; name?: string } = {
       type,
@@ -104,17 +111,16 @@ export function CreateSandboxDialog({
             </div>
 
             <div role="radiogroup" aria-label="Machine size" className="grid grid-cols-2 gap-2">
-              {TYPES.map((t) => {
-                const size = MACHINE_SIZES[t];
-                const active = type === t;
+              {sizes.map((size) => {
+                const active = type === size.name;
 
                 return (
                   <button
-                    key={t}
+                    key={size.name}
                     type="button"
                     role="radio"
                     aria-checked={active}
-                    onClick={() => setType(t)}
+                    onClick={() => setType(size.name)}
                     className={cn(
                       "flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
                       active
@@ -126,7 +132,7 @@ export function CreateSandboxDialog({
                       <span
                         className={cn("font-medium", active ? "text-primary" : "text-foreground")}
                       >
-                        {t}
+                        {size.name}
                       </span>
                       {active ? (
                         <Check className="size-3.5 shrink-0 text-primary" />
@@ -175,7 +181,7 @@ export function CreateSandboxDialog({
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" form="create-sandbox" size="sm" disabled={busy}>
+          <Button type="submit" form="create-sandbox" size="sm" disabled={busy || !type}>
             {busy ? "Creating…" : "Create Sandbox"}
           </Button>
         </DialogFooter>

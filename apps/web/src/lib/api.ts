@@ -1,4 +1,4 @@
-import type { Sandbox, SandboxState, SandboxType } from "@spaces/shared/sandbox";
+import type { MachineSize, Sandbox, SandboxState, SandboxType } from "@spaces/shared/sandbox";
 
 const BASE = "/api/v1";
 /*
@@ -207,7 +207,12 @@ export const api = {
 
   limits: () =>
     request<{
-      limits: { maxSandboxes: number; maxSnapshots: number; maxTtlSeconds: number };
+      limits: {
+        maxSandboxes: number;
+        maxSnapshots: number;
+        maxTtlSeconds: number;
+        allowedTypes: string[];
+      };
       usage: { sandboxes: number; running: number; snapshots: number };
     }>("/limits"),
 
@@ -447,6 +452,40 @@ export const api = {
   /** Direct URL for one path inside a snapshot (file bytes or a folder tar). */
   snapshotFileUrl: (snapshotId: string, path: string) =>
     `${BASE}/snapshots/${snapshotId}/files?path=${encodeURIComponent(path)}`,
+
+  /* -------------------------------------------------------- machine sizes */
+
+  /** Every preset this deployment offers, active ones only unless asked. */
+  machineSizes: (options?: { includeRetired?: boolean }) =>
+    request<{ sizes: MachineSize[] }>(
+      `/machine-sizes${options?.includeRetired ? "?includeRetired=true" : ""}`,
+    ),
+
+  createMachineSize: (input: {
+    name: string;
+    vcpu: number;
+    memMib: number;
+    diskGb: number;
+    description?: string | null;
+  }) =>
+    request<{ size: MachineSize }>("/machine-sizes", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  updateMachineSize: (
+    name: string,
+    patch: { vcpu?: number; memMib?: number; diskGb?: number; description?: string | null },
+  ) =>
+    request<{ size: MachineSize }>(`/machine-sizes/${name}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
+  retireMachineSize: (name: string) =>
+    request<{ name: string; retiredAt: string; inUse: number }>(`/machine-sizes/${name}`, {
+      method: "DELETE",
+    }),
 
   /* ------------------------------------------------------------- identity */
 
