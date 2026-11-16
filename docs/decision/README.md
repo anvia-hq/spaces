@@ -6,41 +6,41 @@ where the obvious approach was tried, measured, or rejected — not a descriptio
 Format: context, decision, consequences (including what it costs), and the alternatives that were ruled
 out. Numbers quoted are measured, not estimated.
 
-| #                                                                     | Decision                                                               | Status                             |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------- |
-| [0001](./0001-microsandbox-as-the-only-runtime.md)                    | microsandbox is the only runtime                                       | accepted, supersedes Firecracker   |
-| [0002](./0002-the-api-is-its-own-contract.md)                         | The API is its own contract                                            | accepted                           |
-| [0003](./0003-no-saas-account-surface.md)                             | No account or SaaS surface                                             | accepted                           |
-| [0004](./0004-monorepo-with-bun-workspaces.md)                        | One monorepo, Bun workspaces, shared Zod contracts                     | accepted                           |
-| [0005](./0005-zod-validation-and-error-envelope.md)                   | Validate everything with Zod, answer in one error envelope             | accepted                           |
-| [0006](./0006-drizzle-sqlite-with-boot-migrations.md)                 | Drizzle over bun:sqlite, migrations at boot                            | accepted                           |
-| [0007](./0007-driver-seam.md)                                         | `SandboxDriver` is the only seam between HTTP and infrastructure       | accepted                           |
-| [0008](./0008-file-operations-ride-on-exec.md)                        | File operations ride on `exec`, not `msb copy`                         | accepted                           |
-| [0009](./0009-two-layer-path-safety.md)                               | Two layers of path safety; symlinks are never followed on delete       | accepted                           |
-| [0010](./0010-signed-transfer-urls-served-by-the-api.md)              | Signed transfer URLs are served by the API, not the guest              | accepted                           |
-| [0011](./0011-snapshots-are-disk-only.md)                             | Snapshots capture the disk, not memory                                 | accepted                           |
-| [0012](./0012-background-commands-and-offset-reads.md)                | Background commands use `setsid`; logs read by byte offset             | accepted                           |
-| [0013](./0013-guest-networking-on-by-default.md)                      | Guests boot with networking enabled                                    | accepted                           |
-| [0014](./0014-port-publishing-pre-publish-and-restart.md)             | Port publishing: pre-publish, and disclose restarts                    | accepted                           |
-| [0015](./0015-ssh-by-provisioning-sshd-in-the-guest.md)               | SSH by provisioning sshd inside the guest                              | accepted                           |
-| [0016](./0016-bootstrap-hook-instead-of-a-custom-image.md)            | A bootstrap hook instead of a custom image                             | accepted                           |
-| [0017](./0017-remote-msb-over-ssh.md)                                 | Driving `msb` on another machine over SSH                              | accepted                           |
-| [0018](./0018-browsing-snapshots-with-a-throwaway-vm.md)              | Browsing a snapshot by booting a throwaway VM                          | accepted                           |
-| [0019](./0019-saved-snapshots-and-share-codes.md)                     | Saved snapshots, and share codes stored as hashes                      | accepted                           |
-| [0020](./0020-stops-and-usage-from-the-event-log.md)                  | Stop operations as rows, usage derived from the event log              | accepted                           |
-| [0021](./0021-extensions-and-honest-refusals.md)                      | Additive extensions and honest refusals                                | accepted                           |
-| [0022](./0022-security-posture-single-key-and-loopback.md)            | One bearer key, loopback by default, tokens where a browser needs them | accepted                           |
-| [0023](./0023-web-console-design-decisions.md)                        | Console: local-first auth, one accent, inline confirmation             | accepted                           |
-| [0024](./0024-commit-the-generated-route-tree.md)                     | Commit the generated route tree                                        | accepted                           |
-| [0025](./0025-deploy-as-one-process.md)                               | Deploy as one process: the API serves the console                      | accepted                           |
-| [0026](./0026-console-on-shadcn-and-reui.md)                          | Console on shadcn/ui primitives and the free ReUI set                  | accepted, supersedes parts of 0023 |
-| [0027](./0027-module-layout.md)                                       | Feature code in modules, on both sides                                 | accepted                           |
-| [0028](./0028-accounts-and-api-keys.md)                               | Accounts, API keys, and one owner per resource                         | accepted                           |
-| [0029](./0029-oxlint-and-oxfmt.md)                                    | One lint and format gate: oxlint and oxfmt, on Aven's rules            | accepted                           |
-| [0030](./0030-postgres.md)                                            | Postgres, and how the old SQLite data gets there                       | accepted                           |
-| [0031](./0031-audit-log.md)                                           | An audit log that cannot be forgotten, and cannot be edited            | accepted                           |
-| [0032](./0032-tracing.md)                                             | Tracing that ships with the server, not with a vendor                  | accepted                           |
-| [0033](./0033-login-first-console.md)                                 | Login-first console: gate at the root, one sidebar                     | accepted                           |
+| #                                                          | Decision                                                               | Status                             |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------- |
+| [0001](./0001-microsandbox-as-the-only-runtime.md)         | microsandbox is the only runtime                                       | accepted, supersedes Firecracker   |
+| [0002](./0002-the-api-is-its-own-contract.md)              | The API is its own contract                                            | accepted                           |
+| [0003](./0003-no-saas-account-surface.md)                  | No account or SaaS surface                                             | accepted                           |
+| [0004](./0004-monorepo-with-bun-workspaces.md)             | One monorepo, Bun workspaces, shared Zod contracts                     | accepted                           |
+| [0005](./0005-zod-validation-and-error-envelope.md)        | Validate everything with Zod, answer in one error envelope             | accepted                           |
+| [0006](./0006-drizzle-sqlite-with-boot-migrations.md)      | Drizzle over bun:sqlite, migrations at boot                            | accepted                           |
+| [0007](./0007-driver-seam.md)                              | `SandboxDriver` is the only seam between HTTP and infrastructure       | accepted                           |
+| [0008](./0008-file-operations-ride-on-exec.md)             | File operations ride on `exec`, not `msb copy`                         | accepted                           |
+| [0009](./0009-two-layer-path-safety.md)                    | Two layers of path safety; symlinks are never followed on delete       | accepted                           |
+| [0010](./0010-signed-transfer-urls-served-by-the-api.md)   | Signed transfer URLs are served by the API, not the guest              | accepted                           |
+| [0011](./0011-snapshots-are-disk-only.md)                  | Snapshots capture the disk, not memory                                 | accepted                           |
+| [0012](./0012-background-commands-and-offset-reads.md)     | Background commands use `setsid`; logs read by byte offset             | accepted                           |
+| [0013](./0013-guest-networking-on-by-default.md)           | Guests boot with networking enabled                                    | accepted                           |
+| [0014](./0014-port-publishing-pre-publish-and-restart.md)  | Port publishing: pre-publish, and disclose restarts                    | accepted                           |
+| [0015](./0015-ssh-by-provisioning-sshd-in-the-guest.md)    | SSH by provisioning sshd inside the guest                              | accepted                           |
+| [0016](./0016-bootstrap-hook-instead-of-a-custom-image.md) | A bootstrap hook instead of a custom image                             | accepted                           |
+| [0017](./0017-remote-msb-over-ssh.md)                      | Driving `msb` on another machine over SSH                              | accepted                           |
+| [0018](./0018-browsing-snapshots-with-a-throwaway-vm.md)   | Browsing a snapshot by booting a throwaway VM                          | accepted                           |
+| [0019](./0019-saved-snapshots-and-share-codes.md)          | Saved snapshots, and share codes stored as hashes                      | accepted                           |
+| [0020](./0020-stops-and-usage-from-the-event-log.md)       | Stop operations as rows, usage derived from the event log              | accepted                           |
+| [0021](./0021-extensions-and-honest-refusals.md)           | Additive extensions and honest refusals                                | accepted                           |
+| [0022](./0022-security-posture-single-key-and-loopback.md) | One bearer key, loopback by default, tokens where a browser needs them | accepted                           |
+| [0023](./0023-web-console-design-decisions.md)             | Console: local-first auth, one accent, inline confirmation             | accepted                           |
+| [0024](./0024-commit-the-generated-route-tree.md)          | Commit the generated route tree                                        | accepted                           |
+| [0025](./0025-deploy-as-one-process.md)                    | Deploy as one process: the API serves the console                      | accepted                           |
+| [0026](./0026-console-on-shadcn-and-reui.md)               | Console on shadcn/ui primitives and the free ReUI set                  | accepted, supersedes parts of 0023 |
+| [0027](./0027-module-layout.md)                            | Feature code in modules, on both sides                                 | accepted                           |
+| [0028](./0028-accounts-and-api-keys.md)                    | Accounts, API keys, and one owner per resource                         | accepted                           |
+| [0029](./0029-oxlint-and-oxfmt.md)                         | One lint and format gate: oxlint and oxfmt, on Aven's rules            | accepted                           |
+| [0030](./0030-postgres.md)                                 | Postgres, and how the old SQLite data gets there                       | accepted                           |
+| [0031](./0031-audit-log.md)                                | An audit log that cannot be forgotten, and cannot be edited            | accepted                           |
+| [0032](./0032-tracing.md)                                  | Tracing that ships with the server, not with a vendor                  | accepted                           |
+| [0033](./0033-login-first-console.md)                      | Login-first console: gate at the root, one sidebar                     | accepted                           |
 
 ## Reading order
 
