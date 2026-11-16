@@ -49,6 +49,7 @@ export {
   lte,
   like,
   inArray,
+  isNull,
   notInArray,
   sql,
 } from "drizzle-orm";
