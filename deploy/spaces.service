@@ -8,12 +8,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=indrazm
-Group=indrazm
-WorkingDirectory=/home/indrazm/spaces/apps/api
-Environment=HOME=/home/indrazm
+User=@USER@
+Group=@USER@
+WorkingDirectory=@HOME@/spaces/apps/api
+Environment=HOME=@HOME@
 EnvironmentFile=/etc/spaces/spaces.env
-ExecStart=/home/indrazm/.bun/bin/bun run /home/indrazm/spaces/apps/api/src/index.ts
+ExecStart=@HOME@/.bun/bin/bun run @HOME@/spaces/apps/api/src/index.ts
 
 Restart=always
 RestartSec=2

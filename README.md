@@ -84,7 +84,7 @@ envelope, schemas defined once in `packages/shared`.
 One command, to any Linux host with KVM:
 
 ```bash
-./scripts/deploy.sh homelab-rz
+./scripts/deploy.sh your-host
 ```
 
 It installs `bun` and `msb`, checks the host, builds the console, writes `/etc/spaces/spaces.env`,

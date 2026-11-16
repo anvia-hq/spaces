@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Deploy spaces to a Linux host with KVM over SSH.
 #
-#   ./scripts/deploy.sh homelab-rz              # first deploy
-#   ./scripts/deploy.sh homelab-rz              # every deploy after that
-#   PORT=9000 ./scripts/deploy.sh homelab-rz    # different port
+#   ./scripts/deploy.sh box                     # first deploy
+#   ./scripts/deploy.sh box                     # every deploy after that
+#   PORT=9000 ./scripts/deploy.sh box           # different port
 #
 # Deploys the control plane and the runner to the SAME machine, which is the
 # supported topology: the API drives microsandbox locally, so commands take
@@ -22,7 +22,7 @@ APP_NAME="${APP_NAME:-spaces}"
 die() { echo "error: $*" >&2; exit 1; }
 step() { echo; echo "==> $*"; }
 
-[ -n "$TARGET" ] || die "usage: $0 <ssh-host>   (e.g. $0 homelab-rz)"
+[ -n "$TARGET" ] || die "usage: $0 <ssh-host>   (e.g. $0 box)"
 
 cd "$(dirname "$0")/.."
 REPO_ROOT="$PWD"
@@ -35,6 +35,7 @@ SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$TARGET")
 "${SSH[@]}" true 2>/dev/null || die "cannot ssh to $TARGET non-interactively (check your SSH config / keys)"
 
 R_HOME=$("${SSH[@]}" 'echo $HOME')
+R_USER=$("${SSH[@]}" 'id -un')
 [ -n "$R_HOME" ] || die "could not determine remote home directory"
 APP_DIR="${APP_DIR:-$R_HOME/$APP_NAME}"
 BUN="$R_HOME/.bun/bin/bun"
@@ -150,7 +151,8 @@ else
   echo "    creating  $ENV_FILE"
   # One template, substituted — so the example in deploy/ cannot drift from
   # what is actually installed.
-  sed -e "s|/home/indrazm|$R_HOME|g" \
+  sed -e "s|@HOME@|$R_HOME|g" \
+      -e "s|@USER@|$R_USER|g" \
       -e "s|^SPACES_BIND=.*|SPACES_BIND=$BIND|" \
       -e "s|^PORT=.*|PORT=$PORT|" \
       -e "s|^SPACES_PUBLIC_URL=.*|SPACES_PUBLIC_URL=$PUBLIC_URL|" \
@@ -281,7 +283,7 @@ fi
 # --------------------------------------------------------------------- unit --
 
 step "service"
-sed -e "s|/home/indrazm|$R_HOME|g" deploy/spaces.service \
+sed -e "s|@HOME@|$R_HOME|g" -e "s|@USER@|$R_USER|g" deploy/spaces.service \
   | "${SSH[@]}" "sudo -n install -D -m 0644 /dev/stdin /etc/systemd/system/$APP_NAME.service"
 
 "${SSH[@]}" "set -e
