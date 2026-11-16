@@ -9,6 +9,7 @@ driver, debugging a file operation, or wondering why a design choice is the way 
 - [Background commands](#background-commands)
 - [Port publishing](#port-publishing)
 - [SSH](#ssh)
+- [The guest image](#the-guest-image)
 - [The driver seam](#the-driver-seam)
 - [Storage and validation](#storage-and-validation)
 - [Measured performance](#measured-performance)
@@ -141,6 +142,42 @@ sshd. Two details decide whether key auth works at all:
   otherwise kill the daemon it just launched.
 
 The key travels as an argv (`ExecRequest.args`), never interpolated into a shell script.
+
+## The guest image
+
+`SPACES_MSB_IMAGE` names the OCI image new sandboxes boot from; the default is `alpine`. Two images in
+`deploy/guest/` are built around that:
+
+- `Dockerfile` — the ready base: Ubuntu 24.04, `curl git tar procps sudo jq unzip`, the uid-1000 `user`
+  with `HOME=/home/user` and passwordless sudo, and **root as the image's default user** so `msb exec`
+  can still provision sshd and packages.
+- `Dockerfile.starter` — `FROM spaces/guest:ubuntu`, adding Node 26 via nvm, bun, uv/uvx, the GitHub CLI
+  and Playwright with Chromium, plus `build-essential` and `python3`.
+
+A deployment gets one by building it on the machine that runs `msb`, then loading it — there is no
+registry. `scripts/deploy.sh` does exactly this with whatever image `SPACES_MSB_IMAGE` names:
+
+```sh
+docker build -t spaces/guest:starter -f deploy/guest/Dockerfile.starter .
+docker save spaces/guest:starter | msb load -t spaces/guest:starter
+SPACES_MSB_IMAGE=spaces/guest:starter ./scripts/deploy.sh <host>
+```
+
+The part that decides whether the image is _usable_ is PATH, and none of the obvious mechanisms
+survive the trip:
+
+- **The image's `ENV` is not forwarded to `msb exec`.** microsandbox runs the command from a guest agent
+  with no PATH of its own, so `ENV PATH=...` does nothing for a session.
+- **The privilege wrapper is a login shell.** `su user -s /bin/sh -c "$s"` — `su` without `-` and with a
+  default login shell counts as a login shell — rebuilds PATH from `/etc/environment` and sources
+  `/etc/profile.d/*.sh`. It never reads `~/.profile`: the shell is dash.
+
+So the starter image puts the toolchain directories in three places (image `ENV`, `/etc/environment`,
+`/etc/profile.d/nvm.sh`) and asserts them at build time, including `dash -lc 'command -v node'`, which is
+the mechanism `su -c` uses. `~/.nvm/current/bin` is on PATH rather than the versioned directory, so
+`nvm use 22` moves the whole entry. `deploy/guest/guest-toolchain-probe.sh` runs the driver's
+`GUEST_INIT` and its wrapper verbatim against a built image; the reasoning is
+[decision 0035](decision/0035-starter-guest-image.md).
 
 ## The driver seam
 

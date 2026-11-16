@@ -121,6 +121,62 @@ The `user` account is not in that snippet: the API creates and owns it on every 
 `SPACES_BOOTSTRAP` runs as **root** (it installs packages); `setupScript` from the create request runs
 as `user`.
 
+### Starter image: the toolchain on first boot
+
+For an agent or web session, the first command usually wants Node, bun, uv and a browser. Installing
+them per sandbox costs minutes on **every** create. `deploy/guest/Dockerfile.starter` layers them onto
+the ready image once:
+
+```bash
+docker build -t spaces/guest:ubuntu -f deploy/guest/Dockerfile .
+docker build -t spaces/guest:starter -f deploy/guest/Dockerfile.starter .
+docker save spaces/guest:starter | msb load -t spaces/guest:starter
+SPACES_MSB_IMAGE=spaces/guest:starter ./scripts/deploy.sh <host>
+```
+
+It ships Node.js 26.13.1 through nvm (default alias, npm included), bun 1.4.4, uv/uvx 0.13.8, the
+GitHub CLI 2.104.0 (a tool, no token: `gh auth login` or `GH_TOKEN` in the sandbox), Playwright 1.65.1
+with Chromium and its libraries, `build-essential` and `python3` + venv. Measured: **879 MB** on disk,
+**~150 s** for a cold build on an Apple-silicon Mac (both architectures), and the toolchain answers
+through the API's own privilege drop with no extra boot step.
+
+Prove an image before deploying it — the probe runs the API's `GUEST_INIT` and its `su` wrapper, so it
+fails for the same reasons a request would:
+
+```bash
+msb create -n toolchain-check --replace spaces/guest:starter
+msb copy deploy/guest/guest-toolchain-probe.sh toolchain-check:/tmp/probe.sh
+msb exec toolchain-check -- sh /tmp/probe.sh \
+  'command -v node bun uv uvx gh playwright; node -v; bun -v; uv --version; uvx --version; gh --version'
+```
+
+A Playwright launch is a separate check, because it needs the installed `playwright` package next to
+the script — the browsers themselves ship in the image, under `/opt/ms-playwright`:
+
+```bash
+msb exec toolchain-check -- sh -c 'su user -s /bin/sh -c "
+  cd /home/user && npm i --no-save playwright@1.65.1 >/dev/null 2>&1 &&
+  cat > check.mjs <<'JS'
+import { chromium } from \"playwright\";
+const b = await chromium.launch();
+const p = await b.newPage();
+await p.setContent(\"<h1>hello from the guest</h1>\");
+console.log(await p.textContent(\"h1\"), b.version());
+await b.close();
+JS
+  node check.mjs"'
+```
+
+It prints `hello from the guest 159.0.8154.6` on this image.
+
+What the image does **not** do, measured rather than assumed: microsandbox does not hand the image's
+ENV to `msb exec`, and the API's wrapper is `su user -c`, which is a login shell that rebuilds PATH
+from `/etc/environment` and `/etc/profile.d`. The image sets PATH in all three places. Running a plain
+`docker run <image> sh -c 'node -v'` does not exercise any of them.
+
+Why the image is shaped this way, and what was deliberately left out, is
+[decision 0035](docs/decision/0035-starter-guest-image.md).
+
 ## Configuration
 
 Every setting has a working default for local development. The full table, the guest network profiles
