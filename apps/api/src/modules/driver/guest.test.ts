@@ -28,7 +28,11 @@ suite("guest runtime (real microVM)", () => {
   let ref = "";
 
   beforeAll(async () => {
-    const handle = await driver.create({ sandboxId, type: "default" });
+    const handle = await driver.create({
+      sandboxId,
+      type: "default",
+      size: { vcpu: 4, memMib: 8192, diskGb: 51 },
+    });
     ref = handle.ref;
   }, 120_000);
 

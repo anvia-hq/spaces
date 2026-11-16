@@ -125,6 +125,17 @@ const ROUTES: Record<string, RouteAction> = {
     targetType: "sandbox",
     targetParam: "sandboxId",
   },
+  "POST /machine-sizes": { action: "machine_size.create", targetType: "machine_size" },
+  "PATCH /machine-sizes/:name": {
+    action: "machine_size.update",
+    targetType: "machine_size",
+    targetParam: "name",
+  },
+  "DELETE /machine-sizes/:name": {
+    action: "machine_size.retire",
+    targetType: "machine_size",
+    targetParam: "name",
+  },
   "POST /api-keys": { action: "api_key.create", targetType: "api_key" },
   "DELETE /api-keys/:keyId": {
     action: "api_key.revoke",

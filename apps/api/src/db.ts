@@ -14,6 +14,8 @@ import {
   sql,
   commands,
   events,
+  isNull,
+  machineSizes,
   sandboxes,
   sandboxPorts,
   savedSnapshots,
@@ -23,6 +25,7 @@ import {
   stops,
   type CommandRow,
   type EventRow,
+  type MachineSizeRow,
   type SandboxPortRow,
   type SandboxRow,
   type SavedSnapshotRow,
@@ -236,6 +239,78 @@ const rawStore = {
   async env(id: string): Promise<Record<string, string>> {
     const row = await this.raw(id);
     return row ? row.env : {};
+  },
+
+  /* -------------------------------------------------------- machine sizes */
+
+  async insertMachineSize(s: {
+    name: string;
+    vcpu: number;
+    memMib: number;
+    diskGb: number;
+    description?: string | null;
+    at: Date;
+  }) {
+    await db.insert(machineSizes).values({
+      name: s.name,
+      vcpu: s.vcpu,
+      memMib: s.memMib,
+      diskGb: s.diskGb,
+      description: s.description ?? null,
+      createdAt: s.at,
+      updatedAt: s.at,
+    });
+  },
+
+  async listMachineSizes(includeRetired: boolean): Promise<MachineSizeRow[]> {
+    const query = db.select().from(machineSizes);
+    const active = includeRetired ? query : query.where(isNull(machineSizes.retiredAt));
+    return active.orderBy(asc(machineSizes.vcpu), asc(machineSizes.name));
+  },
+
+  async machineSize(name: string): Promise<MachineSizeRow | null> {
+    return one(db.select().from(machineSizes).where(eq(machineSizes.name, name)));
+  },
+
+  async updateMachineSize(
+    name: string,
+    patch: {
+      vcpu?: number;
+      memMib?: number;
+      diskGb?: number;
+      description?: string | null;
+      retiredAt?: string | null;
+    },
+  ) {
+    const values: {
+      updatedAt: Date;
+      vcpu?: number;
+      memMib?: number;
+      diskGb?: number;
+      description?: string | null;
+      retiredAt?: Date | null;
+    } = { updatedAt: at(now())! };
+
+    if (patch.vcpu !== undefined) values.vcpu = patch.vcpu;
+
+    if (patch.memMib !== undefined) values.memMib = patch.memMib;
+
+    if (patch.diskGb !== undefined) values.diskGb = patch.diskGb;
+
+    if (patch.description !== undefined) values.description = patch.description;
+
+    if (patch.retiredAt !== undefined) values.retiredAt = at(patch.retiredAt);
+
+    await db.update(machineSizes).set(values).where(eq(machineSizes.name, name));
+  },
+
+  /** How many sandboxes were created at this size, retired or not. */
+  async countOfType(type: string): Promise<number> {
+    const rows = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(sandboxes)
+      .where(eq(sandboxes.type, type));
+    return Number(rows[0]?.n ?? 0);
   },
 
   /* ------------------------------------------------------------ snapshots */

@@ -46,9 +46,22 @@ export interface PortMapping {
   guestPort: number;
 }
 
+export interface MachineSpec {
+  vcpu: number;
+  memMib: number;
+  diskGb: number;
+}
+
 export interface CreateOptions {
   sandboxId: string;
+  /** The preset name; kept for the row, the events and the mock's answers. */
   type: SandboxType;
+  /**
+   * The resolved vCPU/RAM/disk of that preset, read from the operator's own
+   * table at create time. Drivers size the machine from this, never from a
+   * built-in table (docs/decision/0034).
+   */
+  size: MachineSpec;
   /** Ports published as part of the create call, so no restart is needed. */
   ports?: PortMapping[];
   /** Boot from this snapshot/disk image instead of the base image. */

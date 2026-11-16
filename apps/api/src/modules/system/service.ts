@@ -1,10 +1,10 @@
-import { MACHINE_SIZES } from "@spaces/shared/sandbox";
-import type { SandboxType } from "@spaces/shared/sandbox";
 import { config } from "../../config.ts";
 import { store } from "../../db.ts";
 import { driver } from "../driver/service.ts";
+import { listMachineSizes } from "../machine-sizes/service.ts";
 
 export async function limits() {
+  const sizes = await listMachineSizes(false);
   return {
     ok: true as const,
     type: "limits" as const,
@@ -12,7 +12,7 @@ export async function limits() {
       maxSandboxes: config.limits.maxSandboxes,
       maxSnapshots: config.limits.maxSnapshots,
       maxTtlSeconds: config.limits.maxTtlSeconds,
-      allowedTypes: Object.keys(MACHINE_SIZES) as SandboxType[],
+      allowedTypes: sizes.map((size) => size.name),
     },
     usage: await store.counts(),
   };

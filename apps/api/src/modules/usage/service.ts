@@ -1,4 +1,3 @@
-import type { SandboxType } from "@spaces/shared/sandbox";
 import { store } from "../../db.ts";
 import { ServiceError } from "../../errors.ts";
 import { LIVE_STATES, requireSandbox } from "../sandboxes/service.ts";
@@ -6,13 +5,18 @@ import { LIVE_STATES, requireSandbox } from "../sandboxes/service.ts";
 /** Billable seconds one dollar buys, per boat's list price. */
 const SECONDS_PER_DOLLAR = 100_000;
 
-/** Rate at which each machine size consumes machine time. */
-export const BILLING_MULTIPLIER: Record<SandboxType, number> = {
-  small: 0.5,
-  default: 1,
-  large: 2,
-  xlarge: 50 / 9,
-};
+/**
+ * The multiplier is boat's rate at the `default` preset (4 vCPU), scaled by the
+ * vCPU the sandbox actually has. A preset the operator invented is billed by
+ * the same rule instead of falling off the table (docs/decision/0034).
+ */
+const MULTIPLIER_REFERENCE_VCPU = 4;
+
+export function billingMultiplier(vcpu: number | null): number {
+  if (!vcpu) return 1;
+
+  return Math.round((vcpu / MULTIPLIER_REFERENCE_VCPU) * 1000) / 1000;
+}
 
 function parseWindowPoint(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
@@ -78,7 +82,8 @@ export async function sandboxUsage(id: string, query: { since?: string; until?: 
   // A window that ends in the future stops at now.
   const untilMs = Math.min(requestedUntil, nowMs);
 
-  const multiplier = BILLING_MULTIPLIER[sandbox.type] ?? 1;
+  const size = await store.machineSize(sandbox.type);
+  const multiplier = billingMultiplier(size?.vcpu ?? null);
   let billableMs = 0;
   for (const [start, end] of await runningStretches(id)) {
     const from = Math.max(start, sinceMs);

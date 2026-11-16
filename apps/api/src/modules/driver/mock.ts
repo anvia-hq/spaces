@@ -1,5 +1,3 @@
-import type { SandboxType } from "@spaces/shared/sandbox";
-import { MACHINE_SIZES } from "@spaces/shared/sandbox";
 import type { FileEntry, FileMatch } from "@spaces/shared/files";
 import { DriverUnsupported } from "../../errors.ts";
 import type {
@@ -7,6 +5,7 @@ import type {
   DriverHandle,
   ExecRequest,
   ExecResult,
+  MachineSpec,
   SandboxDriver,
 } from "./types.ts";
 
@@ -20,14 +19,14 @@ export class MockDriver implements SandboxDriver {
   // honestly instead of pretending.
   readonly capabilities = { exec: true, files: false, persistence: true };
 
-  /** ref -> booted? */
-  private live = new Map<string, { type: SandboxType; bootedAt: number }>();
+  /** ref -> booted, at the size the caller resolved. */
+  private live = new Map<string, { size: MachineSpec; bootedAt: number }>();
 
   private async jitter(ms = 120) {
     await Bun.sleep(ms + Math.random() * ms);
   }
 
-  private handle(ref: string, _type: SandboxType): DriverHandle {
+  private handle(ref: string): DriverHandle {
     const n = (Math.abs(hash(ref)) % 250) + 10;
     const m = (Math.abs(hash(ref + "b")) % 250) + 10;
     return { ref, url: `https://mock-${ref.slice(-6)}.spaces.local`, ip: `10.64.${n}.${m}` };
@@ -35,20 +34,20 @@ export class MockDriver implements SandboxDriver {
 
   async create(o: CreateOptions): Promise<DriverHandle> {
     await this.jitter();
-    this.live.set(o.sandboxId, { type: o.type, bootedAt: Date.now() });
-    return this.handle(o.sandboxId, o.type);
+    this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    return this.handle(o.sandboxId);
   }
 
   async resume(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
     await this.jitter(80);
-    this.live.set(o.sandboxId, { type: o.type, bootedAt: Date.now() });
-    return this.handle(o.sandboxId, o.type);
+    this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    return this.handle(o.sandboxId);
   }
 
   async fork(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
     await this.jitter(150);
-    this.live.set(o.sandboxId, { type: o.type, bootedAt: Date.now() });
-    return this.handle(o.sandboxId, o.type);
+    this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    return this.handle(o.sandboxId);
   }
 
   async stop(sandboxId: string): Promise<{ diskRef: string }> {
@@ -80,7 +79,7 @@ export class MockDriver implements SandboxDriver {
 
     if (!machine) throw new Error("machine is not running");
 
-    const size = MACHINE_SIZES[machine.type];
+    const { size } = machine;
     const startedAt = new Date().toISOString();
     await this.jitter(90);
     const finishedAt = new Date().toISOString();

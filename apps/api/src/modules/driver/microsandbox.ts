@@ -1,4 +1,3 @@
-import { MACHINE_SIZES } from "@spaces/shared/sandbox";
 import { SANDBOX_WORKDIR } from "@spaces/shared/files";
 import { config } from "../../config.ts";
 import type { FileEntry, FileMatch } from "@spaces/shared/files";
@@ -139,8 +138,7 @@ export class MicrosandboxDriver implements SandboxDriver {
     }
   }
 
-  private spec(type: CreateOptions["type"]) {
-    const size = MACHINE_SIZES[type];
+  private spec(size: CreateOptions["size"]) {
     return { cpus: String(size.vcpu), memory: `${size.memMib}M` };
   }
 
@@ -185,7 +183,7 @@ export class MicrosandboxDriver implements SandboxDriver {
   /* ------------------------------------------------------------ lifecycle */
 
   async create(o: CreateOptions): Promise<DriverHandle> {
-    const { cpus, memory } = this.spec(o.type);
+    const { cpus, memory } = this.spec(o.size);
     await this.msbRun([
       "create",
       "-n",
