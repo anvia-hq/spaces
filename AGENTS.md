@@ -136,6 +136,9 @@ src/lib/            singletons and thin clients: api.ts, format.ts, use-poll.ts,
 
 ## Working style
 
+- Sign off every commit: `git commit -s` (or `git config --global format.signoff true`). The DCO check
+  rejects a commit without a `Signed-off-by:` trailer, and `--amend -s` is the fix when one slips
+  through.
 - Small atomic commits, short imperative subject. Run `bun run typecheck`, `bun run test` and
   `bun run build` before committing (the pre-push hook in `.husky/` runs the CI list), and check the
   console in a browser when you touched it.
