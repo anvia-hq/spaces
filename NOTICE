@@ -1,3 +1,14 @@
 Spaces
 Copyright 2026 Anvia (https://anvia.dev)
 This product includes software developed by Anvia.
+
+Third-party notices
+
+spaces is built on microsandbox (https://github.com/superradcompany/microsandbox),
+Copyright Super Rad Company, licensed under the Apache License, Version 2.0.
+microsandbox is not redistributed with this repository: scripts/install-msb.sh
+downloads its CLI onto the host. The upstream repository publishes no NOTICE
+file, so none is reproduced here.
+
+The complete list of third-party components and their licenses is in
+THIRD_PARTY_LICENSES.md.
