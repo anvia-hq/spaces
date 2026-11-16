@@ -1,0 +1,54 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "**/routeTree.gen.ts",
+    "packages/db/drizzle",
+    "apps/web/src/components/ui",
+    "apps/web/src/components/reui",
+    ".claude",
+    "deploy"
+  ],
+  "jsPlugins": ["./tooling/oxlint/aven-plugin.mjs"],
+  "rules": {
+    "aven/no-conditional-spread": "error",
+    "aven/no-barrel-file": "error",
+    "aven/no-base-ui-outside-ui": "error",
+    "aven/padded-if": "error",
+    "eqeqeq": ["error", "smart"],
+    "import/no-duplicates": "error",
+    "no-lonely-if": "error",
+    "no-nested-ternary": "error",
+    "no-useless-return": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-import-type-side-effects": "error",
+    "unicorn/prefer-includes": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-number-properties": "error",
+    "unicorn/prefer-structured-clone": "error",
+    "unicorn/throw-new-error": "error",
+    "aven/no-reduce-accumulator-copy": "error",
+    "aven/no-reflect-apply": "error",
+    "aven/no-reflect-get": "error",
+    "aven/no-array-filter-map": "error",
+    "aven/no-chained-type-assertions": "error",
+    "aven/no-unknown-type-aliases": "error",
+    "aven/no-module-mocking": "error",
+    "oxc/no-accumulating-spread": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/testing/**"],
+      "rules": {
+        "aven/no-chained-type-assertions": "off"
+      }
+    }
+  ]
+}

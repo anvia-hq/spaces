@@ -1,0 +1,130 @@
+import { Download, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/console/confirm-dialog";
+import { EmptyState } from "@/components/console/empty-state";
+import { Skeleton } from "@/components/console/skeleton";
+import { FileType } from "@/components/reui/file-type";
+import { Button } from "@/components/ui/button";
+import type { FileEntry } from "@/lib/api.ts";
+import { fmtBytes } from "@/lib/format.ts";
+import { cn } from "@/lib/utils";
+
+function entryFileType(entry: FileEntry): string {
+  if (entry.isDir) return "folder";
+
+  return entry.name;
+}
+
+export function FileList({
+  entries,
+  cwd,
+  openPath,
+  loading,
+  busy,
+  onOpen,
+  onDownload,
+  onRemove,
+}: {
+  entries: FileEntry[];
+  cwd: string;
+  openPath: string | null;
+  loading: boolean;
+  busy: string | null;
+  onOpen: (entry: FileEntry) => void;
+  onDownload: (entry: FileEntry) => void;
+  onRemove: (entry: FileEntry) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-col">
+      {renderRows()}
+      <div className="border-t border-border/70 px-3 py-1.5 text-base text-muted-foreground">
+        {entries.length} entr{entries.length === 1 ? "y" : "ies"} in {cwd}
+      </div>
+    </div>
+  );
+
+  function renderRows() {
+    if (loading && entries.length === 0) {
+      return (
+        <div className="flex flex-col gap-1.5 p-3">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-7 w-full rounded-md" />
+          ))}
+        </div>
+      );
+    }
+
+    if (entries.length === 0) {
+      return (
+        <EmptyState
+          glyph="▤"
+          title="Empty directory"
+          hint="Write a file in the Terminal tab, or create a folder here."
+        />
+      );
+    }
+
+    return (
+      <ul role="list" className="max-h-[440px] divide-y divide-border/60 overflow-auto">
+        {entries.map((entry) => {
+          const active = openPath === entry.path;
+          return (
+            <li
+              key={entry.path}
+              className={cn(
+                "group flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-accent/40",
+                active && "bg-accent/60",
+              )}
+            >
+              <FileType
+                type={entryFileType(entry)}
+                size="mini"
+                variant="mono"
+                className="shrink-0"
+              />
+              <button
+                type="button"
+                onClick={() => onOpen(entry)}
+                disabled={busy === `open:${entry.path}`}
+                className="min-w-0 flex-1 truncate text-left text-base text-foreground/90 transition-colors hover:text-primary"
+                title={entry.path}
+              >
+                {entry.name}
+                {entry.isDir && <span className="text-muted-foreground">/</span>}
+              </button>
+              <span className="hidden shrink-0 text-base text-muted-foreground/70 sm:inline">
+                {entry.mode}
+              </span>
+              <span className="w-14 shrink-0 text-right text-base text-muted-foreground">
+                {entry.isDir ? "—" : fmtBytes(entry.size)}
+              </span>
+              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  aria-label={`Download ${entry.name}`}
+                  onClick={() => onDownload(entry)}
+                >
+                  <Download className="text-muted-foreground" />
+                </Button>
+                <ConfirmDialog
+                  trigger={<Trash2 className="size-3" />}
+                  triggerLabel={`Delete ${entry.name}`}
+                  title={`Delete ${entry.name}?`}
+                  description={
+                    entry.isDir
+                      ? "The folder and everything inside it is removed from the sandbox disk."
+                      : "The file is removed from the sandbox disk."
+                  }
+                  confirmLabel="Delete"
+                  destructive
+                  busy={busy === `del:${entry.path}`}
+                  onConfirm={() => onRemove(entry)}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+}

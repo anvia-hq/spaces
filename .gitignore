@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.data/
+.env
+.env.local
+*.log
+.DS_Store
+apps/api/.data/
+# Committed on purpose: `bun run typecheck` works on a fresh clone, before Vite
+# has run to generate it. Regenerated automatically by the router plugin.
+# Local agent worktrees (nested git checkouts, not part of the build)
+.claude/
+.run/

@@ -1,0 +1,14 @@
+import { Hono } from "hono";
+import { type ApiEnv, validate } from "../../errors.ts";
+import { UsageQuery } from "./schema.ts";
+import { sandboxAiUsage, sandboxUsage } from "./service.ts";
+
+export const usageRouter = new Hono<ApiEnv>()
+  .get("/sandboxes/:sandboxId/usage", validate("query", UsageQuery), async (c) => {
+    const usage = await sandboxUsage(c.req.param("sandboxId"), c.req.valid("query"));
+    return c.json({ ok: true as const, success: true, ...usage });
+  })
+  .get("/sandboxes/:sandboxId/ai-usage", async (c) => {
+    const usage = await sandboxAiUsage(c.req.param("sandboxId"));
+    return c.json({ ok: true as const, success: true, type: "ai.usage" as const, ...usage });
+  });

@@ -1,0 +1,64 @@
+import { app } from "./app.ts";
+import { config } from "./config.ts";
+import { store } from "./db.ts";
+import { driver } from "./modules/driver/service.ts";
+import { stopSandbox } from "./modules/sandboxes/service.ts";
+
+/**
+ * Auto-stop: boat archives a sandbox when its TTL lapses. Every sweep stops the
+ * machine so it stops consuming host resources, and leaves the disk for resume.
+ */
+async function reap() {
+  const now = Date.now();
+  const due = (await store.list()).filter((sandbox) => {
+    if (!["ready", "running", "idle", "provisioning"].includes(sandbox.state)) return false;
+
+    if (!sandbox.archiveAfter) return false;
+
+    return new Date(sandbox.archiveAfter).getTime() <= now;
+  });
+
+  for (const sandbox of due) {
+    try {
+      await stopSandbox(sandbox.id);
+      await store.event(sandbox.id, "sandbox.auto_stopped", { reason: "ttl" });
+      console.log(`[reaper] auto-stopped ${sandbox.id}`);
+    } catch (error) {
+      console.warn(
+        `[reaper] could not stop ${sandbox.id}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+}
+
+setInterval(() => void reap(), config.reaperIntervalMs);
+
+/** Traces fill the table faster than anything else; sweep them on a slow timer. */
+async function sweep() {
+  if (config.traces.retentionDays <= 0) return;
+
+  const cutoff = new Date(Date.now() - config.traces.retentionDays * 86_400_000).toISOString();
+
+  try {
+    const removed = await store.sweepSpans(cutoff);
+
+    if (removed > 0) console.log(`[reaper] swept ${removed} spans older than ${cutoff}`);
+  } catch (error) {
+    console.warn("[reaper] span sweep failed:", error instanceof Error ? error.message : error);
+  }
+}
+
+setInterval(() => void sweep(), 10 * 60_000);
+
+console.log(
+  `[api] driver=${driver().kind} capabilities=${JSON.stringify(driver().capabilities)} port=${config.port}`,
+);
+
+export default {
+  port: config.port,
+  hostname: config.bindHost,
+  fetch: app.fetch,
+  /** Long command timeouts need a generous idle window. */
+  idleTimeout: 255,
+};

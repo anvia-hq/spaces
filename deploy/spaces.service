@@ -1,0 +1,28 @@
+[Unit]
+Description=spaces — sandbox API and web console
+Documentation=https://github.com/anvia-hq/spaces
+# tailscaled first: SPACES_BIND may name the tailnet address, and binding fails
+# if the interface does not exist yet.
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=indrazm
+Group=indrazm
+WorkingDirectory=/home/indrazm/spaces/apps/api
+Environment=HOME=/home/indrazm
+EnvironmentFile=/etc/spaces/spaces.env
+ExecStart=/home/indrazm/.bun/bin/bun run /home/indrazm/spaces/apps/api/src/index.ts
+
+Restart=always
+RestartSec=2
+TimeoutStopSec=10
+
+# Restarting or upgrading the API must not kill running microVMs. systemd's
+# default (KillMode=control-group) would signal every descendant, including the
+# VMM processes msb spawned — destroying every sandbox on a routine deploy.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+{
+  "name": "spaces",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:api": "bun run --cwd apps/api dev",
+    "dev:web": "bun run --cwd apps/web dev",
+    "build": "bun run --filter '*' build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "oxlint --no-error-on-unmatched-pattern",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "db:reset": "rm -f apps/api/.data/spaces.db && echo reset",
+    "test": "bun run --cwd apps/api test",
+    "test:rules": "bun test tooling",
+    "test:guest": "bun run --cwd apps/api test:guest",
+    "db:migrate-from-sqlite": "bun run scripts/migrate-sqlite-to-postgres.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0",
+    "typescript": "^5.9.3"
+  }
+}

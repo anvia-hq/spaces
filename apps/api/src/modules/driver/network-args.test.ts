@@ -1,0 +1,67 @@
+/**
+ * Deterministic tests for the networking policy mapping.
+ *
+ * Item 7 of the conformance pass is "document that `public` denies private
+ * addresses and show how to allow one". Documentation that is not tied to code
+ * rots, so the mapping itself is tested here: profile -> flags.
+ */
+import { describe, expect, test } from "bun:test";
+import { networkArgsFor } from "./microsandbox.ts";
+
+const base = {
+  profile: "public",
+  rules: [] as string[],
+  defaultEgress: "",
+  defaultIngress: "",
+  dns: "",
+};
+
+describe("SPACES_NET -> msb flags", () => {
+  test("default public: a profile, not a free pass", () => {
+    // `public` is a profile: public addresses reachable, private denied. That is
+    // why a guest cannot reach a LAN or tailnet address until it is allowed.
+    expect(networkArgsFor(base)).toEqual(["--net", "public"]);
+  });
+
+  test("all is passed through as a terminal policy", () => {
+    expect(networkArgsFor({ ...base, profile: "all" })).toEqual(["--net", "all"]);
+  });
+
+  test("none means no network device at all", () => {
+    expect(networkArgsFor({ ...base, profile: "none" })).toEqual(["--no-net"]);
+    expect(networkArgsFor({ ...base, profile: "   " })).toEqual(["--no-net"]);
+  });
+
+  test("a single allowed host is an explicit rule", () => {
+    const args = networkArgsFor({ ...base, rules: ["allow@192.168.1.50"] });
+    expect(args).toEqual(["--net", "public", "--net-rule", "allow@192.168.1.50"]);
+  });
+
+  test("rules are passed in order, one flag each", () => {
+    const args = networkArgsFor({
+      ...base,
+      rules: ["allow@192.168.1.50", "allow@100.101.102.103:tcp:5432"],
+    });
+    expect(args).toEqual([
+      "--net",
+      "public",
+      "--net-rule",
+      "allow@192.168.1.50",
+      "--net-rule",
+      "allow@100.101.102.103:tcp:5432",
+    ]);
+  });
+
+  test("blank settings are omitted rather than passed as empty flags", () => {
+    const args = networkArgsFor({ ...base, defaultEgress: "deny", dns: "1.1.1.1" });
+    expect(args).toEqual([
+      "--net",
+      "public",
+      "--net-default-egress",
+      "deny",
+      "--dns-nameserver",
+      "1.1.1.1",
+    ]);
+    expect(args).not.toContain("--net-default-ingress");
+  });
+});
