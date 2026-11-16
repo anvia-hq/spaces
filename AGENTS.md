@@ -137,7 +137,8 @@ src/lib/            singletons and thin clients: api.ts, format.ts, use-poll.ts,
 ## Working style
 
 - Small atomic commits, short imperative subject. Run `bun run typecheck`, `bun run test` and
-  `bun run build` before committing, and check the console in a browser when you touched it.
+  `bun run build` before committing (the pre-push hook in `.husky/` runs the CI list), and check the
+  console in a browser when you touched it.
 - Do not commit, push, merge or release unless asked.
 - Record a significant choice in `docs/decision/` in the same change.
 

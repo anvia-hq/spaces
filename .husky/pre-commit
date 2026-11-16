@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Fast gate: what the file diff can break, without a database or a build.
+# Full CI parity runs in pre-push (.husky/pre-push). SKIP_HOOKS=1 bypasses both.
+
+[ -n "${SKIP_HOOKS:-}" ] && exit 0
+
+bun run lint || exit 1
+bun run format:check || exit 1
+bun run typecheck || exit 1
