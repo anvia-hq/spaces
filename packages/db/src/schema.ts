@@ -1,4 +1,13 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 /**
  * Storage for the sandbox lifecycle.
@@ -56,7 +65,7 @@ export const snapshots = pgTable(
     /** creating | ready | error */
     state: text("state").notNull(),
     createdAt: createdAt("created_at").notNull(),
-    sizeBytes: integer("size_bytes"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
     driverRef: text("driver_ref"),
     /** Cached JSON file listing (SnapshotTreeEntry[]) for /snapshots/{id}/tree. */
     manifest: jsonb("manifest").$type<{ path: string; kind: string; size?: number }[]>(),
@@ -78,7 +87,7 @@ export const savedSnapshots = pgTable("saved_snapshots", {
   sourceSandboxId: text("source_sandbox_id").notNull(),
   snapshotId: text("snapshot_id"),
   type: text("type"),
-  sizeBytes: integer("size_bytes"),
+  sizeBytes: bigint("size_bytes", { mode: "number" }),
   createdAt: createdAt("created_at").notNull(),
   ownerId: text("owner_id"),
 });

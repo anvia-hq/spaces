@@ -215,7 +215,8 @@ psql -c 'drop database spaces' -c 'create database spaces'   # start over
 
 Timestamps are `timestamptz` in `mode: "string"`, so SQL compares them as time and the API still hands
 out ISO-8601 strings. JSON columns (`labels`, `env`, `payload`, `manifest`) are `jsonb`, parsed once in
-the store.
+the store. Byte counts (`snapshots.size_bytes`, `saved_snapshots.size_bytes`) are `bigint`: a 4 GiB
+disk is 4,294,967,296, which does not fit an `integer`.
 
 Moving an existing SQLite deployment over: `scripts/migrate-sqlite-to-postgres.ts` (the deploy script
 runs it when it finds a legacy `data/spaces.db` and an empty target).
