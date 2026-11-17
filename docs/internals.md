@@ -198,6 +198,10 @@ can also take full memory snapshots (restore measured at 222 ms) — that capabi
 not wired into the API: stop and resume promise a disk, not a paused process. Changing that needs a
 new route of its own (decision 0011).
 
+Creating from a saved snapshot is a restore, not a fork: the driver boots `msb restore` into the new
+sandbox with the requested size and ports, on the snapshot's disk (decision 0038). `restoreTemporary`
+stays separate and throwaway, for browsing snapshot files (0018).
+
 ## Storage and validation
 
 Drizzle ORM over Postgres, through Bun's built-in `SQL` client (`drizzle-orm/bun-sql`). Migrations
