@@ -46,6 +46,8 @@ out. Numbers quoted are measured, not estimated.
 | [0036](./0036-github-login-from-the-environment.md)        | GitHub sign-in, configured from the environment                        | accepted                           |
 | [0037](./0037-admin-role-for-operators.md)                 | The admin role: an operator is an account, not only a secret           | accepted, extends 0028 and 0034    |
 | [0038](./0038-create-from-a-saved-snapshot.md)             | Create a sandbox from a saved snapshot                                 | accepted                           |
+| [0039](./0039-stock-shadcn-and-a-type-scale.md)            | Stock shadcn/ui, no ReUI, and a real type scale                        | accepted, supersedes parts of 0026 |
+| [0040](./0040-anvia-color-and-theme.md)                    | Color and theme follow the Anvia design system                         | accepted                           |
 
 ## Reading order
 
@@ -82,5 +84,5 @@ work see [docs/internals.md](../internals.md).
 No decision here has been superseded except 0001, which replaced the original Firecracker driver (that
 record explains why the codebase carries no Firecracker code despite having started there), and the parts
 of 0023 that 0026 rewrites: the primitive kit, the token names, and inline confirmation for destructive
-actions that destroy a disk. 0035 narrows 0016 rather than replacing it: a bootstrap snippet is still the
+actions that destroy a disk. 0039 replaces the ReUI and one-size parts of 0026. 0035 narrows 0016 rather than replacing it: a bootstrap snippet is still the
 per-deployment hook, and the starter image is now the other supported answer for a toolchain.

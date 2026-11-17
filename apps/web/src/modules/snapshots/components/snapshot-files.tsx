@@ -2,11 +2,11 @@ import { useState } from "react";
 import { Download, Search } from "lucide-react";
 import { Notice } from "@/components/console/notice";
 import { Skeleton } from "@/components/console/skeleton";
-import { FileType } from "@/components/reui/file-type";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api.ts";
 import { fmtBytes } from "@/lib/format.ts";
 import { usePoll } from "@/lib/use-poll.ts";
+import { EntryIcon } from "@/components/console/entry-icon";
 
 export function SnapshotFiles({ snapshotId }: { snapshotId: string }) {
   const tree = usePoll(() => api.snapshotTree(snapshotId), 60_000);
@@ -48,13 +48,13 @@ export function SnapshotFiles({ snapshotId }: { snapshotId: string }) {
                 rel="noreferrer noopener"
                 className="flex items-center gap-2 px-2.5 py-1 text-base text-foreground/90 transition-colors hover:bg-accent/60"
               >
-                <FileType type={entry.path} size="mini" variant="mono" className="shrink-0" />
+                <EntryIcon isDir={false} />
                 <span className="min-w-0 flex-1 truncate">{entry.path}</span>
                 <span className="shrink-0 text-muted-foreground">{fmtBytes(entry.size)}</span>
               </a>
             ) : (
               <div className="flex items-center gap-2 px-2.5 py-1 text-base text-muted-foreground">
-                <FileType type="folder" size="mini" variant="mono" className="shrink-0" />
+                <EntryIcon isDir />
                 <span className="min-w-0 flex-1 truncate">{entry.path}</span>
               </div>
             )}

@@ -10,7 +10,6 @@
     "**/routeTree.gen.ts",
     "packages/db/drizzle",
     "apps/web/src/components/ui",
-    "apps/web/src/components/reui",
     ".claude",
     "deploy"
   ],

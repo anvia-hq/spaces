@@ -2,16 +2,8 @@ import type { SandboxEvent } from "@/lib/api.ts";
 import { EmptyState } from "@/components/console/empty-state";
 import { Panel } from "@/components/console/panel";
 import { Skeleton } from "@/components/console/skeleton";
-import { Badge } from "@/components/reui/badge";
-import {
-  Timeline,
-  TimelineContent,
-  TimelineDate,
-  TimelineHeader,
-  TimelineIndicator,
-  TimelineItem,
-  TimelineSeparator,
-} from "@/components/reui/timeline";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { api } from "@/lib/api.ts";
 import { timeAgo } from "@/lib/format.ts";
 import { usePoll } from "@/lib/use-poll.ts";
@@ -58,26 +50,34 @@ function LifecycleBody({
   }
 
   return (
-    <Timeline defaultValue={1} className="px-4 py-3">
+    <ol className="flex flex-col px-4 py-3">
       {list.map((event, index) => (
-        <TimelineItem key={event.id} step={index + 1}>
-          <TimelineHeader>
-            <TimelineDate>{timeAgo(event.at)}</TimelineDate>
-            <Badge variant="outline" size="sm" className="font-normal text-foreground">
-              {event.type}
-            </Badge>
-          </TimelineHeader>
-          <TimelineIndicator />
-          {index < list.length - 1 && <TimelineSeparator />}
-          {event.payload && Object.keys(event.payload).length > 0 && (
-            <TimelineContent>
-              <code className="block truncate text-base text-muted-foreground">
+        <li key={event.id} className="flex gap-3">
+          <div className="flex flex-col items-center">
+            <span
+              aria-hidden
+              className={cn(
+                "mt-1.5 size-2 shrink-0 rounded-full",
+                index === 0 ? "bg-primary" : "bg-muted-foreground/40",
+              )}
+            />
+            {index < list.length - 1 && <span aria-hidden className="mt-1 w-px flex-1 bg-border" />}
+          </div>
+          <div className="min-w-0 flex-1 pb-4">
+            <div className="flex items-center justify-between gap-2">
+              <Badge variant="outline" className="font-normal text-foreground">
+                {event.type}
+              </Badge>
+              <time className="shrink-0 text-sm text-muted-foreground">{timeAgo(event.at)}</time>
+            </div>
+            {event.payload && Object.keys(event.payload).length > 0 && (
+              <code className="mt-1.5 block truncate text-base text-muted-foreground">
                 {JSON.stringify(event.payload)}
               </code>
-            </TimelineContent>
-          )}
-        </TimelineItem>
+            )}
+          </div>
+        </li>
       ))}
-    </Timeline>
+    </ol>
   );
 }

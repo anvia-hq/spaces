@@ -56,7 +56,7 @@ export function SandboxHeader({
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="truncate text-base font-semibold tracking-heading text-foreground">
+            <h1 className="truncate text-xl font-semibold tracking-heading text-foreground">
               {sandbox.name}
             </h1>
             <StateBadge state={sandbox.state} />

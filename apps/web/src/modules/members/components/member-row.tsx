@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Ban, ShieldCheck, ShieldMinus, ShieldPlus, Undo2 } from "lucide-react";
-import { Badge } from "@/components/reui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { ManagedUser } from "@/lib/api.ts";
@@ -25,22 +25,14 @@ export function MemberRow({
       <span className="min-w-0 truncate text-base font-medium text-foreground" title={user.email}>
         {user.email}
       </span>
-      {isSelf && (
-        <Badge variant="outline" size="xs" radius="full">
-          you
-        </Badge>
-      )}
+      {isSelf && <Badge variant="outline">you</Badge>}
       {user.admin && (
-        <Badge variant="primary-light" size="xs" radius="full">
+        <Badge variant="secondary">
           <ShieldCheck />
           admin
         </Badge>
       )}
-      {user.banned && (
-        <Badge variant="destructive-light" size="xs" radius="full">
-          banned
-        </Badge>
-      )}
+      {user.banned && <Badge variant="destructive">banned</Badge>}
       <span className="min-w-0 basis-full text-base text-muted-foreground sm:basis-auto">
         joined {timeAgo(user.createdAt)}
       </span>

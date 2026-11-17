@@ -7,7 +7,7 @@ import { Notice } from "@/components/console/notice";
 import { PageHeader } from "@/components/console/page-header";
 import { Panel } from "@/components/console/panel";
 import { Skeleton } from "@/components/console/skeleton";
-import { Badge } from "@/components/reui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,7 @@ export function ApiKeysPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="API keys" />
+      <PageHeader title="API keys" icon={<KeyRound />} />
 
       <Panel
         title="Create a key"
@@ -139,11 +139,7 @@ function ApiKeyRow({
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
       <span className="min-w-0 truncate text-base font-medium text-foreground">{entry.name}</span>
       <code className="min-w-0 text-base text-muted-foreground">{entry.start}…</code>
-      {!entry.enabled && (
-        <Badge variant="outline" size="xs" radius="full">
-          disabled
-        </Badge>
-      )}
+      {!entry.enabled && <Badge variant="outline">disabled</Badge>}
       <span className="min-w-0 basis-full break-words text-base text-muted-foreground sm:basis-auto">
         created {timeAgo(entry.createdAt)} · last used{" "}
         {entry.lastUsedAt ? timeAgo(entry.lastUsedAt) : "never"}

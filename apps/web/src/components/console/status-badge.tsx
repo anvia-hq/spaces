@@ -1,29 +1,15 @@
-import { Badge } from "@/components/reui/badge";
+import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { TONE_CLASS } from "@/components/console/tone.ts";
 
-/**
- * The one status pill.
- *
- * Semantics are carried by variant, so every `ok` in the app looks the same and
- * no call site invents its own colours: success, failure, in-progress and
- * neutral map onto `reui/badge`'s intent variants. The dot is the redundant
- * channel — it survives at small sizes and in monochrome, where hue alone
- * would not.
- */
 export type StatusTone = "ok" | "error" | "warning" | "neutral";
 
-const TONES: Record<
-  StatusTone,
-  {
-    variant: "success-light" | "destructive-light" | "warning-light" | "outline";
-    dot: string;
-    live?: boolean;
-  }
-> = {
-  ok: { variant: "success-light", dot: "bg-success" },
-  error: { variant: "destructive-light", dot: "bg-destructive" },
-  warning: { variant: "warning-light", dot: "bg-warning", live: true },
-  neutral: { variant: "outline", dot: "bg-muted-foreground/60" },
+const TONES: Record<StatusTone, { className: string; dot: string; live?: boolean }> = {
+  ok: { className: TONE_CLASS.success, dot: "bg-success" },
+  error: { className: TONE_CLASS.destructive, dot: "bg-destructive" },
+  warning: { className: TONE_CLASS.warning, dot: "bg-warning", live: true },
+  neutral: { className: "text-muted-foreground", dot: "bg-muted-foreground/60" },
 };
 
 export function StatusBadge({
@@ -32,13 +18,13 @@ export function StatusBadge({
   className,
 }: {
   tone: StatusTone;
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }) {
-  const { variant, dot, live } = TONES[tone];
+  const { className: toneClass, dot, live } = TONES[tone];
 
   return (
-    <Badge variant={variant} size="sm" radius="full" className={cn("gap-1.5", className)}>
+    <Badge variant="outline" className={cn("gap-1.5 rounded-full", toneClass, className)}>
       <span aria-hidden className={cn("size-1.5 rounded-full", dot, live && "live-dot")} />
       {children}
     </Badge>

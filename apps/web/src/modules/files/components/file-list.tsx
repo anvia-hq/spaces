@@ -2,17 +2,11 @@ import { Download, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/console/confirm-dialog";
 import { EmptyState } from "@/components/console/empty-state";
 import { Skeleton } from "@/components/console/skeleton";
-import { FileType } from "@/components/reui/file-type";
 import { Button } from "@/components/ui/button";
 import type { FileEntry } from "@/lib/api.ts";
 import { fmtBytes } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
-
-function entryFileType(entry: FileEntry): string {
-  if (entry.isDir) return "folder";
-
-  return entry.name;
-}
+import { EntryIcon } from "@/components/console/entry-icon";
 
 export function FileList({
   entries,
@@ -71,16 +65,11 @@ export function FileList({
             <li
               key={entry.path}
               className={cn(
-                "group flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-accent/40",
+                "group flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:text-foreground",
                 active && "bg-accent/60",
               )}
             >
-              <FileType
-                type={entryFileType(entry)}
-                size="mini"
-                variant="mono"
-                className="shrink-0"
-              />
+              <EntryIcon isDir={entry.isDir} />
               <button
                 type="button"
                 onClick={() => onOpen(entry)}

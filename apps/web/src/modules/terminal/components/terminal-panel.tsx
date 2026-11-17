@@ -1,5 +1,6 @@
 import { CornerDownLeft, History, Square, TerminalSquare } from "lucide-react";
-import { Badge } from "@/components/reui/badge";
+import { Badge } from "@/components/ui/badge";
+import { TONE_CLASS } from "@/components/console/tone.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -173,7 +174,7 @@ export function TerminalPanel({ sandboxId, live }: { sandboxId: string; live: bo
                     <button
                       type="button"
                       onClick={() => void loadLogs(c)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent/50"
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:text-foreground"
                     >
                       <span className={cn("w-6 shrink-0 text-base", exitTone(running, ok))}>
                         {running ? "··" : (c.exitCode ?? "—")}
@@ -182,7 +183,7 @@ export function TerminalPanel({ sandboxId, live }: { sandboxId: string; live: bo
                         {c.command}
                       </code>
                       {c.status === "timed_out" && (
-                        <Badge variant="warning-light" size="xs" radius="full">
+                        <Badge variant="outline" className={TONE_CLASS.warning}>
                           timeout
                         </Badge>
                       )}

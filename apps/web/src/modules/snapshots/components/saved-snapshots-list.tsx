@@ -1,8 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight, Search, Share2 } from "lucide-react";
+import { Archive, ArrowUpRight, Search, Share2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/console/confirm-dialog";
 import { PageHeader } from "@/components/console/page-header";
-import { IconStack } from "@/components/reui/icon-stack";
 import { Notice } from "@/components/console/notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +33,7 @@ export function SavedSnapshotsList({
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Snapshots"
+        icon={<Archive />}
         actions={
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -59,9 +59,9 @@ export function SavedSnapshotsList({
 
       {saved.data && all.length === 0 && (
         <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-border/80 bg-card/30 px-6 py-16 text-center">
-          <IconStack>
+          <div className="flex size-12 items-center justify-center rounded-xl border bg-muted/50 text-muted-foreground">
             <Share2 className="size-5" />
-          </IconStack>
+          </div>
           <div>
             <p className="text-base font-medium text-foreground">No saved snapshots</p>
             <p className="mx-auto mt-1 max-w-sm text-base leading-relaxed text-muted-foreground">
@@ -106,7 +106,7 @@ export function SavedSnapshotsList({
                     </span>
                   </div>
 
-                  <SnapshotStatusBadge status={s.status} size="sm" />
+                  <SnapshotStatusBadge status={s.status} />
 
                   <div className="ml-auto flex items-center gap-1.5">
                     {s.snapshotId && s.status === "ready" && (

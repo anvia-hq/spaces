@@ -3,6 +3,7 @@ import { AppShell } from "@/components/console/app-shell";
 import { NotFound } from "@/components/console/not-found";
 import { AuthScreen } from "@/modules/auth/components/auth-screen.tsx";
 import { useAuth } from "@/modules/auth/hooks/use-auth.ts";
+import { useThemeShortcut } from "@/lib/use-theme-shortcut.ts";
 
 export const Route = createRootRoute({
   component: Root,
@@ -18,6 +19,7 @@ export const Route = createRootRoute({
  */
 function Root() {
   const { auth, signOut } = useAuth();
+  useThemeShortcut();
 
   if (auth.status === "loading") {
     return <Booting />;

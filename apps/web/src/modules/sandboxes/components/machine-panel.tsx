@@ -1,7 +1,7 @@
 import type { MachineSize, Sandbox } from "@spaces/shared/sandbox";
 import { CopyButton } from "@/components/console/copy-button";
 import { Panel } from "@/components/console/panel";
-import { Badge } from "@/components/reui/badge";
+import { Badge } from "@/components/ui/badge";
 import { timeAgo } from "@/lib/format.ts";
 import { timeUntil } from "../format.ts";
 
@@ -39,12 +39,7 @@ export function MachinePanel({
       {Object.keys(sandbox.labels ?? {}).length > 0 && (
         <div className="flex flex-wrap gap-1.5 border-t border-border/70 px-4 py-2.5">
           {Object.entries(sandbox.labels ?? {}).map(([key, value]) => (
-            <Badge
-              key={key}
-              variant="outline"
-              size="sm"
-              className="font-normal text-muted-foreground"
-            >
+            <Badge key={key} variant="outline" className="font-normal text-muted-foreground">
               {key}={value}
             </Badge>
           ))}

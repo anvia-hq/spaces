@@ -1,7 +1,7 @@
 import { Notice } from "@/components/console/notice";
 import { CopyButton } from "@/components/console/copy-button";
 import { Skeleton } from "@/components/console/skeleton";
-import { Badge } from "@/components/reui/badge";
+import { Badge } from "@/components/ui/badge";
 import type { SpanRecord } from "@/lib/api.ts";
 
 import { cn } from "@/lib/utils";
@@ -83,12 +83,7 @@ export function TraceDetail({
 
               <span className="ml-auto flex shrink-0 items-center gap-2">
                 {span.statusCode === "error" && (
-                  <Badge
-                    variant="destructive-light"
-                    size="xs"
-                    radius="full"
-                    title={span.statusMessage ?? undefined}
-                  >
+                  <Badge variant="destructive" title={span.statusMessage ?? undefined}>
                     error
                   </Badge>
                 )}
