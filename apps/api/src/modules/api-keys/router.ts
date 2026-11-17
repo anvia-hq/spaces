@@ -14,7 +14,12 @@ function signedIn(c: Context<ApiEnv>): AuthUser | null {
 
   if (principal.kind !== "user" || principal.via !== "session") return null;
 
-  return { id: principal.userId, email: principal.email, name: principal.name };
+  return {
+    id: principal.userId,
+    email: principal.email,
+    name: principal.name,
+    role: principal.role,
+  };
 }
 
 const NO_USER = "Sign in to manage API keys; a key or the operator key cannot create them.";

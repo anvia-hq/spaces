@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { signOut as authSignOut, useSession } from "@/lib/auth-client.ts";
 
-export type AuthUser = { email: string; name: string | null };
+export type AuthUser = { email: string; name: string | null; admin: boolean };
 
 export type Auth =
   | { status: "loading" }
@@ -29,9 +29,15 @@ export function useAuth() {
   if (session.isPending) {
     auth = { status: "loading" };
   } else if (session.data?.user) {
+    const role = (session.data.user as { role?: string | null }).role ?? "user";
+
     auth = {
       status: "signed-in",
-      user: { email: session.data.user.email, name: session.data.user.name ?? null },
+      user: {
+        email: session.data.user.email,
+        name: session.data.user.name ?? null,
+        admin: role.split(",").includes("admin"),
+      },
     };
   }
 

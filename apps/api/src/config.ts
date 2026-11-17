@@ -120,6 +120,14 @@ export const config = {
    * Better Auth sessions and user API keys (see docs/decision/0028).
    */
   apiKey: process.env.SPACES_API_KEY ?? "sk_local_dev",
+  /**
+   * Addresses that become admins the first time they sign in. This is the
+   * bootstrap, not the membership list: once one admin exists they promote the
+   * rest through the API, and this can be emptied (docs/decision/0036).
+   */
+  adminEmails: (process.env.SPACES_ADMIN_EMAILS ?? "")
+    .split(",")
+    .flatMap((email) => (email.trim() ? [email.trim().toLowerCase()] : [])),
   auth: {
     /** Signing secret for sessions and keys; must change in production. */
     secret: process.env.SPACES_AUTH_SECRET ?? "spaces-dev-auth-secret-change-me-0123456789",
@@ -144,6 +152,8 @@ export const config = {
       clientId: githubClientId,
       clientSecret: githubClientSecret,
     },
+    /** `SPACES_AUTH_DEBUG=1` prints Better Auth's own reasoning to the log. */
+    debugLogging: process.env.SPACES_AUTH_DEBUG === "1",
   },
   /**
    * HMAC key for signed transfer URLs. Derived from the API key when unset, so

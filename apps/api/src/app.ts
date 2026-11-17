@@ -26,6 +26,7 @@ import { sshRouter } from "./modules/ssh/router.ts";
 import { systemRouter } from "./modules/system/router.ts";
 import { transfersRouter } from "./modules/transfers/router.ts";
 import { usageRouter } from "./modules/usage/router.ts";
+import { usersRouter } from "./modules/users/router.ts";
 
 export const app = new Hono<ApiEnv>();
 
@@ -59,6 +60,7 @@ app.route("/api/v1", sshRouter);
 app.route("/api/v1", usageRouter);
 app.route("/api/v1", meRouter);
 app.route("/api/v1", apiKeysRouter);
+app.route("/api/v1", usersRouter);
 app.route("/api/v1", auditRouter);
 app.route("/api/v1", tracesRouter);
 

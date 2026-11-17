@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { type ApiEnv, fail, validate } from "../../errors.ts";
+import { mayOperate } from "../auth/admins.ts";
 import {
   CreateMachineSizeRequest,
   MachineSizeListQuery,
@@ -15,10 +16,14 @@ import {
 } from "./service.ts";
 
 const OPERATOR_ONLY =
-  "Machine sizes are operator-owned: send the operator key (SPACES_API_KEY) to change them.";
+  "Machine sizes are operator-owned: sign in as an admin, or send the operator key (SPACES_API_KEY).";
 
+/**
+ * The operator key and an account with the admin role, one predicate: a second
+ * definition of "may act as the operator" is how the two drift apart (0036).
+ */
 function operatorOnly(c: Context<ApiEnv>) {
-  if (c.get("principal").kind === "operator") return null;
+  if (mayOperate(c.get("principal"))) return null;
 
   return fail(c, "forbidden", OPERATOR_ONLY);
 }

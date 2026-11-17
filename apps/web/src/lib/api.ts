@@ -490,11 +490,19 @@ export const api = {
   /* ------------------------------------------------------------- identity */
 
   /**
-   * Who this browser is: the operator key, a user session, or a user key. The
-   * same answer carries which alternative sign-in providers the server has
-   * credentials for, so the auth screen never offers a button it cannot honour.
+   * Who this browser is: the operator key, a user session, or a user key; whether
+   * it may act as the operator; and which alternative sign-in providers the
+   * server has credentials for, so the auth screen never offers a button it
+   * cannot honour.
    */
-  me: () => request<{ principal: MePrincipal; operator: boolean; login: LoginProviders }>("/me"),
+  me: () =>
+    request<{
+      principal: MePrincipal;
+      operator: boolean;
+      role: string;
+      admin: boolean;
+      login: LoginProviders;
+    }>("/me"),
 
   /* ------------------------------------------------------------- api keys */
 
@@ -508,6 +516,36 @@ export const api = {
 
   revokeApiKey: (id: string) =>
     request<{ id: string; status: "revoked" }>(`/api-keys/${id}`, { method: "DELETE" }),
+
+  /* --------------------------------------------------------------- members */
+
+  listUsers: (query: { search?: string; limit?: number; offset?: number } = {}) => {
+    const params = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") params.set(key, String(value));
+    }
+
+    const suffix = params.toString() ? `?${params}` : "";
+    return request<{ users: ManagedUser[]; total: number; limit: number; offset: number }>(
+      `/users${suffix}`,
+    );
+  },
+
+  setUserRole: (userId: string, role: "admin" | "user") =>
+    request<{ user: ManagedUser }>(`/users/${userId}/role`, {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    }),
+
+  banUser: (userId: string, reason: string | null) =>
+    request<{ user: ManagedUser }>(`/users/${userId}/ban`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  unbanUser: (userId: string) =>
+    request<{ user: ManagedUser }>(`/users/${userId}/ban`, { method: "DELETE" }),
 
   /* --------------------------------------------------------------- audit */
 
@@ -749,7 +787,26 @@ export type LoginProviders = { github: boolean };
 
 export type MePrincipal =
   | { kind: "operator"; via: "operator" }
-  | { kind: "user"; via: "key" | "session"; userId: string; email: string; name: string };
+  | {
+      kind: "user";
+      via: "key" | "session";
+      userId: string;
+      email: string;
+      name: string;
+      role: string;
+      admin: boolean;
+    };
+
+/** One account, as `/users` returns it. */
+export interface ManagedUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  admin: boolean;
+  banned: boolean;
+  createdAt: string;
+}
 
 export interface ApiKeyEntry {
   id: string;

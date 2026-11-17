@@ -50,6 +50,11 @@ export function canSee(ownerId: string | null): boolean {
 
 export const operatorScope: Scope = { ownerId: null, admin: true };
 
-export function userScope(userId: string): Scope {
-  return { ownerId: userId, admin: false };
+/**
+ * A signed-in person. An admin sees every row, exactly as the operator key does,
+ * and keeps their own id as the owner so new rows are still stamped with them.
+ * A key inherits it: the key is that person's credential (decision 0037).
+ */
+export function userScope(userId: string, admin = false): Scope {
+  return { ownerId: userId, admin };
 }

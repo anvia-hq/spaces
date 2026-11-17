@@ -76,16 +76,17 @@ with are `small`, `default`, `large` and `xlarge`.
 
 ## Machine sizes
 
-| Method   | Path                    | Notes                                                               |
-| -------- | ----------------------- | ------------------------------------------------------------------- |
-| `GET`    | `/machine-sizes`        | Active presets, smallest first; `includeRetired=true` adds retired  |
-| `POST`   | `/machine-sizes`        | Operator key only; `{ name, vcpu, memMib, diskGb, description? }`   |
-| `PATCH`  | `/machine-sizes/{name}` | Operator key only; any of `vcpu`, `memMib`, `diskGb`, `description` |
-| `DELETE` | `/machine-sizes/{name}` | Operator key only; retires, does not delete (see below)             |
+| Method   | Path                    | Notes                                                              |
+| -------- | ----------------------- | ------------------------------------------------------------------ |
+| `GET`    | `/machine-sizes`        | Active presets, smallest first; `includeRetired=true` adds retired |
+| `POST`   | `/machine-sizes`        | Operator only; `{ name, vcpu, memMib, diskGb, description? }`      |
+| `PATCH`  | `/machine-sizes/{name}` | Operator only; any of `vcpu`, `memMib`, `diskGb`, `description`    |
+| `DELETE` | `/machine-sizes/{name}` | Operator only; retires, does not delete (see below)                |
 
 Any authenticated caller may read the list — the console needs it to render the create dialog.
-Changing it takes the operator key (`SPACES_API_KEY`); a session cookie or a user's API key answers
-`403 machine_class_plan_required` with the reason. Every change is in the
+Changing it takes the operator key (`SPACES_API_KEY`) **or a signed-in account with the `admin` role**,
+sent as its session cookie or as one of its own API keys; anything else answers `403 forbidden` with
+the reason. See [admin role](#admin-role). Every change is in the
 [audit log](#audit-log) as `machine_size.create`, `machine_size.update` or `machine_size.retire`,
 with the preset name as the target.
 
@@ -233,21 +234,50 @@ belong to whoever made them either way.
 | `GET`        | `/api/auth/get-session`    | Who the cookie belongs to                                          |
 | `POST`       | `/api/auth/sign-in/social` | `{ provider, callbackURL }` → GitHub redirect, `404` when unset    |
 | `GET`        | `/api/auth/callback/{id}`  | The provider's callback; lands on `SPACES_AUTH_URL`                |
-| `GET`        | `/api/v1/me`               | `{ principal, operator, login }` for any accepted credential       |
+| `GET`        | `/api/v1/me`               | `{ principal, operator, role, admin, login }` for any credential   |
 | `GET`/`POST` | `/api/v1/api-keys`         | List keys, or create one (`{ name }`) — the secret comes back once |
 | `DELETE`     | `/api/v1/api-keys/{keyId}` | Revoke                                                             |
 
 `/api/auth/*` is Better Auth's own surface: its envelopes and cookies, outside the `/api/v1` contract.
+
+**Credentials, in order of precedence.** A valid session cookie wins; then a session-less bearer
+token: the operator key (`SPACES_API_KEY`), which sees every sandbox and belongs to no account, or a
+user API key, which carries its owner's role and otherwise sees only its owner's rows. Another
+account's sandbox answers `404`, not `403`, so ids cannot be probed. Managing keys requires a session —
+a key cannot mint another key, and the operator key answers `403`.
 
 `login` is `{ "github": true | false }`: the alternative sign-in providers this deployment has
 credentials for. The console reads it from `/me` because that is the one call it already makes, and
 offers the GitHub button only when it is `true` — a server with no OAuth app answers `404` to
 `/api/auth/sign-in/social`, so a button would be a dead end.
 
-**Credentials, in order of precedence.** A valid session cookie wins; then the operator key
-(`SPACES_API_KEY`), which sees every sandbox and belongs to no account; then a user API key, which sees
-only its owner's rows. Another account's sandbox answers `404`, not `403`, so ids cannot be probed.
-Managing keys requires a session — a key cannot mint another key, and the operator key answers `403`.
+`GET /me` answers `{ ok, type: "me", principal, operator, role, admin, login }`. `operator` is true
+only for the operator key; `role` is `admin` or `user` for an account (and `admin` for the operator
+key); `admin` is the one field a console needs — it is true for both.
+
+## Admin role
+
+`role` lives on the account (Better Auth's admin plugin: `role`, `banned`, `banReason`, `banExpires`).
+An account with `admin` sees every sandbox, as the operator key does, and passes the operator-only
+gates (machine sizes, the routes below). Its rows are still stamped with its own id, and a ban stops
+it signing in and using its keys. The operator key is unchanged and needs no account.
+
+| Method   | Path                      | Notes                                                    |
+| -------- | ------------------------- | -------------------------------------------------------- |
+| `GET`    | `/api/v1/users`           | `search` (email contains), `limit`, `offset`; admin only |
+| `POST`   | `/api/v1/users/{id}/role` | `{ role: "admin" \| "user" }`; admin only                |
+| `POST`   | `/api/v1/users/{id}/ban`  | `{ reason? }`; admin only                                |
+| `DELETE` | `/api/v1/users/{id}/ban`  | lift the ban; admin only                                 |
+
+A user row on `/users` is `{ id, email, name, role, admin, banned, createdAt }`; the list is newest
+first with `{ users, total, limit, offset }`. Demoting or banning the **last** admin is a `403` with
+the reason, so a deployment cannot lock itself out; promote somebody else first. Every change is in
+the audit log as `user.role_set`, `user.ban` or `user.unban` with the user id as the target.
+
+**The first admin is `SPACES_ADMIN_EMAILS`.** A comma-separated list, empty by default: an address on
+it is promoted to `admin` at boot (if the account already exists) and on its first sign-in or sign-up
+otherwise, recorded once as `auth.admin_bootstrap`. After that the admin promotes the rest through
+`/api/v1/users/{id}/role`, and the variable can be emptied — it never demotes anybody.
 
 ## Audit log
 
