@@ -82,7 +82,7 @@ export class MockDriver implements SandboxDriver {
     await this.jitter(90);
     const ref = `mock://snap/${snapshotId}`;
     this.snapshots.add(ref);
-    return { ref, sizeBytes: 30 * 1024 * 1024 };
+    return { ref, sizeBytes: 4 * 1024 ** 3 };
   }
 
   async destroySnapshot(ref: string): Promise<void> {
