@@ -10,9 +10,11 @@ import { iso, now, store } from "../../db.ts";
 import { withSpan } from "../traces/tracer.ts";
 import { ServiceError } from "../../errors.ts";
 import { driver } from "../driver/service.ts";
-import type { MachineSpec } from "../driver/types.ts";
+import type { DriverHandle, MachineSpec } from "../driver/types.ts";
 import { requireActiveMachineSize } from "../machine-sizes/service.ts";
+import { resolveCreateSource } from "./create-source.ts";
 import { reservePrepublishPorts, republishPorts } from "./host-ports.ts";
+import type { CreateSource } from "./types.ts";
 
 function ttlToArchiveAfter(ttlSeconds: number | null): string | null {
   if (ttlSeconds === null) return null;
@@ -47,9 +49,6 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
   // Refused before anything is written: a name that cannot boot is not a size.
   const size = await requireActiveMachineSize(input.type);
 
-  // `from` is honoured only when it names something with a disk. Boat answers
-  // 404 snapshot_not_found for an unknown source; cold-booting a fresh sandbox
-  // instead would look like success and quietly discard what was asked for.
   const source = input.from ? await resolveCreateSource(input.from) : null;
 
   const id = newSandboxId();
@@ -66,34 +65,11 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
   });
   await store.event(id, "sandbox.created", { type: input.type });
 
-  void provision(id, input.type, size, input.env, source?.id, input.setupScript).catch(() => {
+  void provision(id, input.type, size, input.env, source, input.setupScript).catch(() => {
     /* recorded on the row by provision() */
   });
 
   return (await store.get(id))!;
-}
-
-/**
- * Resolve a `from` selector to a sandbox whose disk can be forked.
- *
- * The spec also allows a saved-snapshot name or a `bsh_` share code. Restoring
- * from those needs a throwaway restore first (the same machinery snapshot
- * browsing uses) and is not wired into create yet, so they answer 404 with the
- * real reason rather than pretending.
- */
-async function resolveCreateSource(from: string): Promise<Sandbox> {
-  const source = await store.raw(from);
-
-  if (source?.driverRef) return (await store.get(source.id))!;
-
-  if (from.startsWith("bsh_") || (await store.getSavedSnapshot(from))) {
-    throw new ServiceError(
-      "not_found",
-      "snapshot_not_found: creating from a saved snapshot is not supported yet; fork a sandbox or restore the snapshot first",
-    );
-  }
-
-  throw new ServiceError("not_found", `snapshot_not_found: no sandbox or snapshot named ${from}`);
 }
 
 async function provision(
@@ -101,11 +77,11 @@ async function provision(
   type: SandboxType,
   size: MachineSpec,
   env: Record<string, string>,
-  from?: string,
+  source: CreateSource | null,
   setupScript?: string,
 ) {
   return withSpan("sandbox.provision", { "spaces.sandbox_id": id, "spaces.type": type }, () =>
-    provisionInner(id, type, size, env, from, setupScript),
+    provisionInner(id, type, size, env, source, setupScript),
   );
 }
 
@@ -114,7 +90,7 @@ async function provisionInner(
   type: SandboxType,
   size: MachineSpec,
   env: Record<string, string>,
-  from?: string,
+  source: CreateSource | null,
   setupScript?: string,
 ) {
   const started = Date.now();
@@ -124,18 +100,16 @@ async function provisionInner(
   const ports = await reservePrepublishPorts(id);
 
   try {
-    const source = from ? await store.raw(from) : null;
-    const handle =
-      from && source?.driverRef
-        ? await driver().fork({
-            sandboxId: id,
-            type,
-            size,
-            fromRef: source.driverRef,
-            env,
-            ports,
-          })
-        : await driver().create({ sandboxId: id, type, size, env, ports });
+    const options = { sandboxId: id, type, size, env, ports };
+    let handle: DriverHandle;
+
+    if (!source) {
+      handle = await driver().create(options);
+    } else if (source.kind === "snapshot") {
+      handle = await driver().restore({ ...options, fromRef: source.driverRef });
+    } else {
+      handle = await driver().fork({ ...options, fromRef: source.driverRef });
+    }
 
     await republishPorts(id, handle.ip ?? null);
     await runBootstrap(id, handle.ref);
@@ -489,7 +463,11 @@ async function forkInner(
   await store.event(newId_, "sandbox.fork", { from: id });
   await store.event(id, "sandbox.forked", { into: newId_ });
 
-  void provision(newId_, type, size, overrides.env ?? {}, id).catch(() => {});
+  void provision(newId_, type, size, overrides.env ?? {}, {
+    kind: "sandbox",
+    id,
+    driverRef: row.driverRef,
+  }).catch(() => {});
 
   return (await store.get(newId_))!;
 }
