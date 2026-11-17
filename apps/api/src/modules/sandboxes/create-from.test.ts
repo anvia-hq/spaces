@@ -123,7 +123,7 @@ async function saveSnapshot(sandboxId: string, name: string, credential: Credent
   expect(res.status).toBe(202);
   trackSaved(name);
   const body = (await res.json()) as {
-    snapshot: { name: string; status: string; snapshotId?: string };
+    snapshot: { name: string; status: string; snapshotId?: string; sizeBytes?: number };
   };
 
   if (body.snapshot.snapshotId) trackSnapshot(body.snapshot.snapshotId);
@@ -202,6 +202,7 @@ describe("creating a sandbox from a saved snapshot", () => {
     const name = unique("ready");
     const saved = await saveSnapshot(sourceId, name);
     expect(saved.status).toBe("ready");
+    expect(saved.sizeBytes).toBe(4 * 1024 ** 3);
     const snapshotId = saved.snapshotId!;
 
     const { id, res, body } = await createSandbox(
