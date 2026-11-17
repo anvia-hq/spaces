@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import type { Sandbox } from "@spaces/shared/sandbox";
-import { MACHINE_SIZES } from "@spaces/shared/sandbox";
+import type { MachineSize, Sandbox } from "@spaces/shared/sandbox";
 import { ChevronLeft, Copy, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/console/confirm-dialog";
@@ -21,6 +20,7 @@ import { timeAgo } from "@/lib/format.ts";
 
 export function SandboxHeader({
   sandbox,
+  size,
   busy,
   stale,
   act,
@@ -29,6 +29,7 @@ export function SandboxHeader({
   onDeleteOpenChange,
 }: {
   sandbox: Sandbox;
+  size: MachineSize | undefined;
   busy: string | null;
   stale: boolean;
   act: (key: string, fn: () => Promise<unknown>, done: string) => Promise<void>;
@@ -36,7 +37,6 @@ export function SandboxHeader({
   deleteOpen: boolean;
   onDeleteOpenChange: (open: boolean) => void;
 }) {
-  const size = MACHINE_SIZES[sandbox.type];
   const live = LIVE_STATES.includes(sandbox.state);
   const stopped = sandbox.state === "archived";
   const broken = sandbox.state === "error";
@@ -77,7 +77,9 @@ export function SandboxHeader({
             </button>
             <MetaLine
               items={[
-                `${sandbox.type} · ${size.vcpu}c / ${size.memMib / 1024}G`,
+                size
+                  ? `${sandbox.type} · ${size.vcpu}c / ${size.memMib / 1024}G`
+                  : `${sandbox.type} · retired`,
                 sandbox.ip,
                 sandbox.createdAt ? `up ${timeAgo(sandbox.createdAt)}` : null,
               ]}

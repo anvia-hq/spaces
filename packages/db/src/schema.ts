@@ -140,6 +140,21 @@ export const stops = pgTable(
   (table) => [index("stops_sandbox_idx").on(table.sandboxId, table.requestedAt)],
 );
 
+/**
+ * Operator-owned machine presets (decision 0034). A retired preset keeps its
+ * row so sandboxes already created with it stay readable.
+ */
+export const machineSizes = pgTable("machine_sizes", {
+  name: text("name").primaryKey(),
+  vcpu: integer("vcpu").notNull(),
+  memMib: integer("mem_mib").notNull(),
+  diskGb: integer("disk_gb").notNull(),
+  description: text("description"),
+  retiredAt: createdAt("retired_at"),
+  createdAt: createdAt("created_at").notNull(),
+  updatedAt: createdAt("updated_at").notNull(),
+});
+
 /** A guest port published on the host and proxied by the API. */
 export const sandboxPorts = pgTable(
   "sandbox_ports",
@@ -262,3 +277,4 @@ export type SandboxPortRow = typeof sandboxPorts.$inferSelect;
 export type SnapshotShareRow = typeof snapshotShares.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type SpanRow = typeof spans.$inferSelect;
+export type MachineSizeRow = typeof machineSizes.$inferSelect;

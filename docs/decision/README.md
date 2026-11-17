@@ -41,6 +41,7 @@ out. Numbers quoted are measured, not estimated.
 | [0031](./0031-audit-log.md)                                | An audit log that cannot be forgotten, and cannot be edited            | accepted                           |
 | [0032](./0032-tracing.md)                                  | Tracing that ships with the server, not with a vendor                  | accepted                           |
 | [0033](./0033-login-first-console.md)                      | Login-first console: gate at the root, one sidebar                     | accepted                           |
+| [0034](./0034-operator-defined-machine-sizes.md)           | Machine sizes are operator-owned data                                  | accepted                           |
 
 ## Reading order
 
@@ -58,6 +59,7 @@ Changing a specific area? Jump straight to the relevant record:
 | Snapshots, forks, sharing            | 0011, 0018, 0019             |
 | Networking, ports, SSH, remote hosts | 0013, 0014, 0015, 0017, 0022 |
 | Storage, metering, state             | 0006, 0020, 0030             |
+| Machine sizes, capacity, presets     | 0034                         |
 | The console                          | 0021, 0023, 0026, 0024       |
 | Deploying it somewhere               | 0025, 0017, 0022             |
 | Where a file goes                    | 0027                         |

@@ -2,8 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
 import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table";
-import type { Sandbox } from "@spaces/shared/sandbox";
-import { MACHINE_SIZES } from "@spaces/shared/sandbox";
+import type { MachineSize, Sandbox } from "@spaces/shared/sandbox";
 import { ArrowUpRight, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/console/confirm-dialog";
@@ -31,10 +30,12 @@ import type { Act } from "../types.ts";
 
 export function SandboxGrid({
   rows,
+  sizes,
   busy,
   act,
 }: {
   rows: Sandbox[];
+  sizes: (name: string) => MachineSize | undefined;
   busy: string | null;
   act: Act;
 }) {
@@ -80,10 +81,10 @@ export function SandboxGrid({
         header: "Machine",
         size: 110,
         cell: ({ row }) => {
-          const size = MACHINE_SIZES[row.original.type];
+          const size = sizes(row.original.type);
           return (
             <span className="text-base text-muted-foreground">
-              {size.vcpu}c / {size.memMib / 1024}G
+              {size ? `${size.vcpu}c / ${size.memMib / 1024}G` : row.original.type}
             </span>
           );
         },

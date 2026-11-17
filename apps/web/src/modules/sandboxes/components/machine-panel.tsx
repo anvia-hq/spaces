@@ -1,20 +1,28 @@
-import type { Sandbox } from "@spaces/shared/sandbox";
-import { MACHINE_SIZES } from "@spaces/shared/sandbox";
+import type { MachineSize, Sandbox } from "@spaces/shared/sandbox";
 import { CopyButton } from "@/components/console/copy-button";
 import { Panel } from "@/components/console/panel";
 import { Badge } from "@/components/reui/badge";
 import { timeAgo } from "@/lib/format.ts";
 import { timeUntil } from "../format.ts";
 
-export function MachinePanel({ sandbox }: { sandbox: Sandbox }) {
-  const size = MACHINE_SIZES[sandbox.type];
-
+export function MachinePanel({
+  sandbox,
+  size,
+}: {
+  sandbox: Sandbox;
+  size: MachineSize | undefined;
+}) {
   return (
     <Panel title="Machine" flush>
       <dl className="divide-y divide-border/70">
         {[
           ["type", sandbox.type],
-          ["resources", `${size.vcpu} vCPU · ${size.memMib / 1024} GiB · ${size.diskGb} GiB disk`],
+          [
+            "resources",
+            size
+              ? `${size.vcpu} vCPU · ${size.memMib / 1024} GiB · ${size.diskGb} GiB disk`
+              : "preset no longer offered",
+          ],
           ["ip", sandbox.ip ?? "—"],
           ["auto-stop", sandbox.archiveAfter ? timeUntil(sandbox.archiveAfter) : "never"],
           ["created", sandbox.createdAt ? timeAgo(sandbox.createdAt) : "—"],

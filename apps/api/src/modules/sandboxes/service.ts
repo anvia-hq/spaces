@@ -10,6 +10,8 @@ import { iso, now, store } from "../../db.ts";
 import { withSpan } from "../traces/tracer.ts";
 import { ServiceError } from "../../errors.ts";
 import { driver } from "../driver/service.ts";
+import type { MachineSpec } from "../driver/types.ts";
+import { requireActiveMachineSize } from "../machine-sizes/service.ts";
 import { reservePrepublishPorts, republishPorts } from "./host-ports.ts";
 
 function ttlToArchiveAfter(ttlSeconds: number | null): string | null {
@@ -42,6 +44,9 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
     );
   }
 
+  // Refused before anything is written: a name that cannot boot is not a size.
+  const size = await requireActiveMachineSize(input.type);
+
   // `from` is honoured only when it names something with a disk. Boat answers
   // 404 snapshot_not_found for an unknown source; cold-booting a fresh sandbox
   // instead would look like success and quietly discard what was asked for.
@@ -61,7 +66,7 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
   });
   await store.event(id, "sandbox.created", { type: input.type });
 
-  void provision(id, input.type, input.env, source?.id, input.setupScript).catch(() => {
+  void provision(id, input.type, size, input.env, source?.id, input.setupScript).catch(() => {
     /* recorded on the row by provision() */
   });
 
@@ -94,18 +99,20 @@ async function resolveCreateSource(from: string): Promise<Sandbox> {
 async function provision(
   id: string,
   type: SandboxType,
+  size: MachineSpec,
   env: Record<string, string>,
   from?: string,
   setupScript?: string,
 ) {
   return withSpan("sandbox.provision", { "spaces.sandbox_id": id, "spaces.type": type }, () =>
-    provisionInner(id, type, env, from, setupScript),
+    provisionInner(id, type, size, env, from, setupScript),
   );
 }
 
 async function provisionInner(
   id: string,
   type: SandboxType,
+  size: MachineSpec,
   env: Record<string, string>,
   from?: string,
   setupScript?: string,
@@ -120,8 +127,15 @@ async function provisionInner(
     const source = from ? await store.raw(from) : null;
     const handle =
       from && source?.driverRef
-        ? await driver().fork({ sandboxId: id, type, fromRef: source.driverRef, env, ports })
-        : await driver().create({ sandboxId: id, type, env, ports });
+        ? await driver().fork({
+            sandboxId: id,
+            type,
+            size,
+            fromRef: source.driverRef,
+            env,
+            ports,
+          })
+        : await driver().create({ sandboxId: id, type, size, env, ports });
 
     await republishPorts(id, handle.ip ?? null);
     await runBootstrap(id, handle.ref);
@@ -377,6 +391,7 @@ async function resumeInner(
   }
 
   const type = options.type ?? sandbox.type;
+  const size = await requireActiveMachineSize(type);
   // A resume ends any pending stop early, as `superseded`.
   const pending = await store.pendingStop(id);
 
@@ -414,6 +429,7 @@ async function resumeInner(
     const handle = await driver().resume({
       sandboxId: id,
       type,
+      size,
       fromRef: row.driverRef,
       env: await store.env(id),
     });
@@ -458,6 +474,7 @@ async function forkInner(
 
   const newId_ = newSandboxId();
   const type = overrides.type ?? source.type;
+  const size = await requireActiveMachineSize(type);
   await store.insert({
     id: newId_,
     name: overrides.name ?? `${source.name} (fork)`,
@@ -472,7 +489,7 @@ async function forkInner(
   await store.event(newId_, "sandbox.fork", { from: id });
   await store.event(id, "sandbox.forked", { into: newId_ });
 
-  void provision(newId_, type, overrides.env ?? {}, id).catch(() => {});
+  void provision(newId_, type, size, overrides.env ?? {}, id).catch(() => {});
 
   return (await store.get(newId_))!;
 }

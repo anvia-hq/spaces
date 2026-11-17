@@ -11,8 +11,9 @@ same zod schemas in `packages/shared`; a change to it lands with a decision reco
 
 `GET /health` sits at the root, outside `/api/v1`, and needs no auth.
 
-The surface covers sandboxes, files, commands, snapshots, ports, SSH and usage. Routes for a
-capability this deployment does not run are absent or answer `501` — see [scope](#scope).
+The surface covers sandboxes, files, commands, snapshots, ports, SSH, usage and the machine sizes a
+sandbox can be created at. Routes for a capability this deployment does not run are absent or answer
+`501` — see [scope](#scope).
 
 ## Request conventions
 
@@ -57,6 +58,66 @@ earlier version are accepted rather than rejected, and recorded in
 `POST /sandboxes/{id}/resume` takes `ttlSeconds` (resets the auto-stop timer from the resume, not from
 the original create), `type` (moves the sandbox to another size) and `name`, and accepts the other
 tolerated fields unchanged.
+
+### `type` is a machine size name
+
+`type` names a preset from `GET /machine-sizes` (decision
+[0034](./decision/0034-operator-defined-machine-sizes.md)). It is a lower-case name of up to 32
+characters (`^[a-z][a-z0-9-]{0,31}$`), not a closed list: the four presets a fresh deployment starts
+with are `small`, `default`, `large` and `xlarge`.
+
+- A create without `type` uses `default`. `default` cannot be retired.
+- A name that does not exist, or one that was retired, answers `404 not_found` with
+  `retired_machine_size:` at the start of the message. It never falls back to a default size.
+- `GET /limits` `allowedTypes` lists the active presets; `GET /machine-sizes` carries their vCPU,
+  RAM and disk.
+- Resuming or forking into a different `type` applies that preset's current numbers to a new boot.
+  Editing a preset does not resize sandboxes already running at it.
+
+## Machine sizes
+
+| Method   | Path                    | Notes                                                               |
+| -------- | ----------------------- | ------------------------------------------------------------------- |
+| `GET`    | `/machine-sizes`        | Active presets, smallest first; `includeRetired=true` adds retired  |
+| `POST`   | `/machine-sizes`        | Operator key only; `{ name, vcpu, memMib, diskGb, description? }`   |
+| `PATCH`  | `/machine-sizes/{name}` | Operator key only; any of `vcpu`, `memMib`, `diskGb`, `description` |
+| `DELETE` | `/machine-sizes/{name}` | Operator key only; retires, does not delete (see below)             |
+
+Any authenticated caller may read the list — the console needs it to render the create dialog.
+Changing it takes the operator key (`SPACES_API_KEY`); a session cookie or a user's API key answers
+`403 machine_class_plan_required` with the reason. Every change is in the
+[audit log](#audit-log) as `machine_size.create`, `machine_size.update` or `machine_size.retire`,
+with the preset name as the target.
+
+```json
+{
+  "name": "large",
+  "vcpu": 8,
+  "memMib": 16384,
+  "diskGb": 111,
+  "description": "Eight cores, 16 GiB",
+  "retiredAt": null,
+  "createdAt": "2026-11-16T00:00:00.000Z",
+  "updatedAt": "2026-11-16T00:00:00.000Z"
+}
+```
+
+| Field         | Range                                                  |
+| ------------- | ------------------------------------------------------ |
+| `name`        | `^[a-z][a-z0-9-]{0,31}$`, unique; a duplicate is `409` |
+| `vcpu`        | 1–64                                                   |
+| `memMib`      | 512–262144                                             |
+| `diskGb`      | 5–2048                                                 |
+| `description` | up to 200 characters; `null` clears it                 |
+
+**`DELETE` retires; it does not delete.** The row keeps its name, so sandboxes already created at
+that size stay readable (and keep reporting it on their own resource). A retired preset is not in
+`GET /machine-sizes`, not in `allowedTypes`, and cannot be created, resumed or forked into; it does
+not appear in the console's size list. The response is
+`{ name, retiredAt, inUse }`, where `inUse` counts the sandboxes ever created at that size.
+`default` answers `403` (it is the fallback every create without a type relies on), retiring a name
+that is already retired is idempotent, and a retired preset cannot be edited. Create it again to
+reuse the name.
 
 ## Commands
 
@@ -219,8 +280,17 @@ curl -s -c jar -H "$J" -X POST http://localhost:8787/api/auth/sign-up/email \
 curl -s -b jar -H "$J" -X POST $B/api-keys -d '{"name":"ci"}'   # → { key: "spk_..." }
 curl -s -H 'Authorization: Bearer spk_...' $B/sandboxes
 
+# what this deployment can boot, then add a preset of your own
+curl -s -H "$K" $B/machine-sizes
+curl -s -H "$K" -H "$J" -X POST $B/machine-sizes \
+  -d '{"name":"burst","vcpu":6,"memMib":12288,"diskGb":101}'
+
 # create
 curl -s -H "$K" -H "$J" -X POST $B/sandboxes -d '{"type":"small","ttlSeconds":900}'
+curl -s -H "$K" -H "$J" -X POST $B/sandboxes -d '{"type":"burst","ttlSeconds":900}'
+
+# retire a preset; sandboxes already at it keep working
+curl -s -H "$K" -X DELETE $B/machine-sizes/burst
 
 # run something
 curl -s -H "$K" -H "$J" -X POST $B/sandboxes/bx_xxx/commands \

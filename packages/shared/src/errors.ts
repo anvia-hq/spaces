@@ -23,6 +23,7 @@ export const ErrorCodes = {
   unauthorized: 401,
   forbidden: 403,
   not_found: 404,
+  retired_machine_size: 404,
   invalid_body: 400,
   invalid_query: 400,
   invalid_timeout: 400,
