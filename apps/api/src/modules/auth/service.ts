@@ -14,7 +14,7 @@ import { ADMIN_ROLES } from "./roles.ts";
  * GitHub is a provider only when the deployment set both halves of the pair:
  * an unset client id or secret leaves the key out of the map, and Better Auth
  * never learns the provider exists. A server with no GitHub app still boots,
- * and email + password still signs people in (docs/decision/0036).
+ * and email + password still signs people in (docs/decision/0037).
  */
 const socialProviders: BetterAuthOptions["socialProviders"] = config.auth.github.enabled
   ? {
@@ -31,7 +31,7 @@ const socialProviders: BetterAuthOptions["socialProviders"] = config.auth.github
  * plugin adds user-owned keys, which the API accepts as a Bearer credential
  * alongside the operator key (docs/decision/0028). The admin plugin owns `role`
  * and `banned` on the user row, which is how an account acts as an operator
- * (docs/decision/0036).
+ * (docs/decision/0037).
  */
 export const auth = betterAuth({
   appName: "spaces",

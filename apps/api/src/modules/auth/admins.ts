@@ -59,7 +59,7 @@ export function promotionEntry(userId: string, email: string | null, reason: str
 /**
  * The bootstrap: an address in `SPACES_ADMIN_EMAILS` becomes an admin the first
  * time it signs in or signs up. Idempotent, audited once per promotion, and
- * harmless once the variable is emptied again (docs/decision/0036).
+ * harmless once the variable is emptied again (docs/decision/0037).
  */
 export async function promoteIfListed(
   authContext: HookContext,

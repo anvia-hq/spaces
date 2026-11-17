@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as KeysRouteImport } from './routes/keys'
+import { Route as MembersRouteImport } from './routes/members'
 import { Route as SnapshotsRouteImport } from './routes/snapshots'
 import { Route as TracesRouteImport } from './routes/traces'
 import { Route as SandboxesSandboxIdRouteImport } from './routes/sandboxes.$sandboxId'
@@ -29,6 +30,11 @@ const AuditRoute = AuditRouteImport.update({
 const KeysRoute = KeysRouteImport.update({
   id: '/keys',
   path: '/keys',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MembersRoute = MembersRouteImport.update({
+  id: '/members',
+  path: '/members',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SnapshotsRoute = SnapshotsRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/keys': typeof KeysRoute
+  '/members': typeof MembersRoute
   '/snapshots': typeof SnapshotsRoute
   '/traces': typeof TracesRoute
   '/sandboxes/$sandboxId': typeof SandboxesSandboxIdRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/keys': typeof KeysRoute
+  '/members': typeof MembersRoute
   '/snapshots': typeof SnapshotsRoute
   '/traces': typeof TracesRoute
   '/sandboxes/$sandboxId': typeof SandboxesSandboxIdRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/keys': typeof KeysRoute
+  '/members': typeof MembersRoute
   '/snapshots': typeof SnapshotsRoute
   '/traces': typeof TracesRoute
   '/sandboxes/$sandboxId': typeof SandboxesSandboxIdRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/keys'
+    | '/members'
     | '/snapshots'
     | '/traces'
     | '/sandboxes/$sandboxId'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/keys'
+    | '/members'
     | '/snapshots'
     | '/traces'
     | '/sandboxes/$sandboxId'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/keys'
+    | '/members'
     | '/snapshots'
     | '/traces'
     | '/sandboxes/$sandboxId'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuditRoute: typeof AuditRoute
   KeysRoute: typeof KeysRoute
+  MembersRoute: typeof MembersRoute
   SnapshotsRoute: typeof SnapshotsRoute
   TracesRoute: typeof TracesRoute
   SandboxesSandboxIdRoute: typeof SandboxesSandboxIdRoute
@@ -129,6 +142,13 @@ declare module '@tanstack/react-router' {
       path: '/keys'
       fullPath: '/keys'
       preLoaderRoute: typeof KeysRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/members': {
+      id: '/members'
+      path: '/members'
+      fullPath: '/members'
+      preLoaderRoute: typeof MembersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/snapshots': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditRoute: AuditRoute,
   KeysRoute: KeysRoute,
+  MembersRoute: MembersRoute,
   SnapshotsRoute: SnapshotsRoute,
   TracesRoute: TracesRoute,
   SandboxesSandboxIdRoute: SandboxesSandboxIdRoute,

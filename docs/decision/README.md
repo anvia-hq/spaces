@@ -44,6 +44,7 @@ out. Numbers quoted are measured, not estimated.
 | [0034](./0034-operator-defined-machine-sizes.md)           | Machine sizes are operator-owned data                                  | accepted                           |
 | [0035](./0035-starter-guest-image.md)                      | A starter guest image with the toolchain baked in                      | accepted, narrows 0016             |
 | [0036](./0036-github-login-from-the-environment.md)        | GitHub sign-in, configured from the environment                        | accepted                           |
+| [0037](./0037-admin-role-for-operators.md)                 | The admin role: an operator is an account, not only a secret           | accepted, extends 0028 and 0034    |
 
 ## Reading order
 
@@ -61,11 +62,11 @@ Changing a specific area? Jump straight to the relevant record:
 | Snapshots, forks, sharing            | 0011, 0018, 0019             |
 | Networking, ports, SSH, remote hosts | 0013, 0014, 0015, 0017, 0022 |
 | Storage, metering, state             | 0006, 0020, 0030             |
-| Machine sizes, capacity, presets     | 0034                         |
+| Machine sizes, capacity, presets     | 0034, 0037                   |
 | The console                          | 0021, 0023, 0026, 0024       |
 | Deploying it somewhere               | 0025, 0017, 0022             |
 | Where a file goes                    | 0027                         |
-| Auth, keys, who sees which sandbox   | 0028, 0036                   |
+| Auth, keys, who sees which sandbox   | 0028, 0037                   |
 | Audit log, who did what              | 0031                         |
 | Tracing, spans, metrics              | 0032                         |
 | Style, lint rules, formatting        | 0029                         |

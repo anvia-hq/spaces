@@ -39,7 +39,7 @@ function unauthorized(c: Parameters<MiddlewareHandler<ApiEnv>>[0], message: stri
  * - a Better Auth session cookie, which is what the console uses after sign-in.
  *
  * A user whose role is `admin` is promoted to an admin scope, and a key takes
- * the role of the person who owns it (docs/decision/0036).
+ * the role of the person who owns it (docs/decision/0037).
  *
  * The resolved scope rides on AsyncLocalStorage for the rest of the request, so
  * every read that could return another user's row is filtered in one place

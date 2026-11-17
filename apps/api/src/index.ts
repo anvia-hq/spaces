@@ -38,7 +38,7 @@ setInterval(() => void reap(), config.reaperIntervalMs);
 
 /**
  * `SPACES_ADMIN_EMAILS` also covers accounts that already exist, so a deployment
- * with one user on it needs no SQL step to get its first admin (decision 0036).
+ * with one user on it needs no SQL step to get its first admin (decision 0037).
  */
 const promoted = await promoteListedAtBoot().catch((error: unknown) => {
   console.warn("[api] admin bootstrap failed:", error instanceof Error ? error.message : error);

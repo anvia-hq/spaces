@@ -1,6 +1,17 @@
 import { useState, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Archive, Boxes, KeyRound, LogOut, Menu, ScrollText, XIcon } from "lucide-react";
+import {
+  Activity,
+  Archive,
+  Boxes,
+  KeyRound,
+  LogOut,
+  Menu,
+  ScrollText,
+  Users,
+  XIcon,
+} from "lucide-react";
+import { Badge } from "@/components/reui/badge";
 import { Mark } from "@/components/console/mark";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -50,6 +61,16 @@ const GROUPS: readonly { label: string; items: readonly NavItem[] }[] = [
   },
 ];
 
+/** Only an admin sees this: everything behind it answers 403 to anybody else. */
+const ADMIN_GROUP: readonly { label: string; items: readonly NavItem[] }[] = [
+  {
+    label: "Admin",
+    items: [
+      { to: "/members", label: "Members", icon: Users, match: (path) => path === "/members" },
+    ],
+  },
+];
+
 /**
  * The signed-in frame: a fixed sidebar and one content column.
  *
@@ -76,6 +97,8 @@ export function AppShell({
   });
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const groups = () => (user.admin ? [...GROUPS, ...ADMIN_GROUP] : GROUPS);
+
   return (
     <div className="flex min-h-dvh bg-background">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[224px] flex-col bg-card/60 lg:flex">
@@ -85,7 +108,7 @@ export function AppShell({
           aria-label="Sections"
           className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-2 py-2"
         >
-          {GROUPS.map((group) => (
+          {groups().map((group) => (
             <div key={group.label} className="flex flex-col">
               <p className="mb-1 px-2 text-base font-medium text-muted-foreground/70">
                 {group.label}
@@ -159,7 +182,7 @@ export function AppShell({
             </div>
 
             <nav aria-label="Sections" className="flex flex-1 flex-col gap-3.5 px-2 py-1">
-              {GROUPS.map((group) => (
+              {groups().map((group) => (
                 <div key={group.label} className="flex flex-col">
                   <p className="mb-1 px-2 text-base font-medium text-muted-foreground/70">
                     {group.label}
@@ -247,8 +270,13 @@ function AccountBlock({ user, onSignOut }: { user: AuthUser; onSignOut: () => vo
       </Avatar>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-foreground" title={user.email}>
-          {user.email}
+        <p className="flex items-center gap-1.5 truncate text-foreground" title={user.email}>
+          <span className="truncate">{user.email}</span>
+          {user.admin && (
+            <Badge variant="primary-light" size="xs" radius="full" title="Admin">
+              admin
+            </Badge>
+          )}
         </p>
       </div>
 

@@ -5,7 +5,7 @@
  * bootstrap list promotes a listed address once and the role survives a new
  * session, an admin changes what only the operator could, a key carries its
  * owner's role, the last admin cannot be demoted or banned, and the operator key
- * answers exactly as it did before (docs/decision/0036).
+ * answers exactly as it did before (docs/decision/0037).
  */
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
