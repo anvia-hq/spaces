@@ -1,10 +1,26 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import type { BetterAuthOptions } from "better-auth";
 import { apiKey } from "@better-auth/api-key";
 import { db } from "../../db.ts";
 import { schema } from "@spaces/db";
 import { config } from "../../config.ts";
 import * as audit from "../audit/service.ts";
+
+/**
+ * GitHub is a provider only when the deployment set both halves of the pair:
+ * an unset client id or secret leaves the key out of the map, and Better Auth
+ * never learns the provider exists. A server with no GitHub app still boots,
+ * and email + password still signs people in (docs/decision/0034).
+ */
+const socialProviders: BetterAuthOptions["socialProviders"] = config.auth.github.enabled
+  ? {
+      github: {
+        clientId: config.auth.github.clientId,
+        clientSecret: config.auth.github.clientSecret,
+      },
+    }
+  : {};
 
 /**
  * Better Auth owns the account tables and the `/api/auth/*` surface: sign-up,
@@ -23,6 +39,7 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
   },
+  socialProviders,
   session: {
     expiresIn: config.auth.sessionDays * 24 * 60 * 60,
     updateAge: 24 * 60 * 60,
