@@ -6,7 +6,7 @@
  * rots, so the mapping itself is tested here: profile -> flags.
  */
 import { describe, expect, test } from "bun:test";
-import { networkArgsFor } from "./microsandbox.ts";
+import { networkArgsFor, rootDiskArgsFor } from "./microsandbox.ts";
 
 const base = {
   profile: "public",
@@ -63,5 +63,11 @@ describe("SPACES_NET -> msb flags", () => {
       "1.1.1.1",
     ]);
     expect(args).not.toContain("--net-default-ingress");
+  });
+});
+
+describe("machine size -> root disk flags", () => {
+  test("the root disk is the size's disk, not msb's 4 GiB default", () => {
+    expect(rootDiskArgsFor({ vcpu: 4, memMib: 8192, diskGb: 51 })).toEqual(["--root-disk", "51G"]);
   });
 });

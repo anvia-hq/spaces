@@ -190,6 +190,7 @@ export class MicrosandboxDriver implements SandboxDriver {
 
   async create(o: CreateOptions): Promise<DriverHandle> {
     const { cpus, memory } = this.spec(o.size);
+    const rootDisk = rootDiskArgsFor(o.size);
     await this.msbRun([
       "create",
       "-n",
@@ -198,6 +199,7 @@ export class MicrosandboxDriver implements SandboxDriver {
       cpus,
       "-m",
       memory,
+      ...rootDisk,
       ...this.networkArgs(),
       ...this.portArgs(o.ports ?? []),
       "--replace",
@@ -1010,6 +1012,10 @@ function padMode(mode: string): string {
  * policy, and `none` means no network device at all. Explicit rules are passed
  * through in order, because msb gives them precedence over the profile.
  */
+export function rootDiskArgsFor(size: CreateOptions["size"]) {
+  return ["--root-disk", `${size.diskGb}G`];
+}
+
 export function networkArgsFor(o: {
   profile: string;
   rules: string[];
