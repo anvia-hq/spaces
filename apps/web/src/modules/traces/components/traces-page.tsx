@@ -5,7 +5,8 @@ import { Notice } from "@/components/console/notice";
 import { PageHeader } from "@/components/console/page-header";
 import { Skeleton } from "@/components/console/skeleton";
 import { Tabs } from "@/components/console/tabs";
-import { Frame, FramePanel } from "@/components/reui/frame";
+import { KpiCard } from "@/components/console/kpi-card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
@@ -43,6 +44,7 @@ export function TracesPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Traces"
+        icon={<Activity />}
         actions={
           <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
             <RefreshCw className={cn(loading && "animate-spin")} />
@@ -112,15 +114,15 @@ export function TracesPage() {
 
     if (traces.length === 0) {
       return (
-        <Frame spacing="sm">
-          <FramePanel className="p-6">
+        <Card size="sm" className="gap-0 p-0">
+          <div className="p-6">
             <EmptyState
               icon={<Activity className="size-4" />}
               title="Nothing traced"
               hint="No requests or spans have been recorded in this window yet."
             />
-          </FramePanel>
-        </Frame>
+          </div>
+        </Card>
       );
     }
 
@@ -150,15 +152,7 @@ function MetricsStrip({
     <div className="flex flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map((tile) => (
-          <Frame key={tile.label} spacing="xs">
-            <FramePanel className="px-3.5 py-3">
-              <div className="text-muted-foreground">{tile.label}</div>
-              <div className="mt-1 font-medium text-foreground" data-numeric>
-                {tile.value}
-              </div>
-              <div className="mt-1 text-muted-foreground">{tile.hint}</div>
-            </FramePanel>
-          </Frame>
+          <KpiCard key={tile.label} label={tile.label} value={tile.value} hint={tile.hint} />
         ))}
       </div>
 

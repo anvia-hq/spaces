@@ -1,17 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  Activity,
-  Archive,
-  Boxes,
-  KeyRound,
-  LogOut,
-  Menu,
-  ScrollText,
-  Users,
-  XIcon,
-} from "lucide-react";
-import { Badge } from "@/components/reui/badge";
+import { Activity, Archive, Boxes, KeyRound, LogOut, Menu, ScrollText, Users } from "lucide-react";
 import { Mark } from "@/components/console/mark";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -72,11 +61,11 @@ const ADMIN_GROUP: readonly { label: string; items: readonly NavItem[] }[] = [
 ];
 
 /**
- * The signed-in frame: a fixed sidebar and one content column.
+ * The signed-in frame: one sidebar and one content column.
  *
  * Pages own their own header, actions and spacing, so the shell stays out of
- * the way — the alternative (a global top bar plus per-page sub-headers) is
- * what made the console hard to follow.
+ * the way. The sidebar is the same component on desktop (a fixed rail) and in
+ * the mobile sheet, so the two cannot drift apart.
  */
 export function AppShell({
   user,
@@ -97,36 +86,14 @@ export function AppShell({
   });
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const groups = () => (user.admin ? [...GROUPS, ...ADMIN_GROUP] : GROUPS);
-
   return (
     <div className="flex min-h-dvh bg-background">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[224px] flex-col bg-card/60 lg:flex">
-        <Brand />
-
-        <nav
-          aria-label="Sections"
-          className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-2 py-2"
-        >
-          {groups().map((group) => (
-            <div key={group.label} className="flex flex-col">
-              <p className="mb-1 px-2 text-base font-medium text-muted-foreground/70">
-                {group.label}
-              </p>
-              {group.items.map((item) => (
-                <NavLink key={item.to} item={item} active={item.match(path)} />
-              ))}
-            </div>
-          ))}
-        </nav>
-
-        <div className="p-1.5">
-          <AccountBlock user={user} onSignOut={onSignOut} />
-        </div>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[240px] border-r bg-sidebar lg:flex">
+        <SidebarContent user={user} path={path} onSignOut={onSignOut} />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col lg:pl-[224px]">
-        <header className="sticky top-0 z-20 flex h-11 items-center gap-2 bg-background/85 px-3 backdrop-blur-xl lg:hidden">
+      <div className="flex min-w-0 flex-1 flex-col lg:pl-[240px]">
+        <header className="sticky top-0 z-20 flex h-12 items-center gap-2 border-b bg-background/85 px-3 backdrop-blur-xl lg:hidden">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -137,14 +104,14 @@ export function AppShell({
           </Button>
           <Link to="/" className="flex items-center gap-2">
             <Mark size={17} />
-            <span className="text-base font-semibold tracking-brand">spaces</span>
+            <span className="text-lg font-semibold tracking-brand">spaces</span>
           </Link>
         </header>
 
         <main
           id="main"
           className={cn(
-            "mx-auto w-full flex-1 px-5 py-6 sm:px-8 sm:py-7",
+            "mx-auto w-full flex-1 px-5 py-6 sm:px-8 sm:py-8",
             fullWidth ? "max-w-none" : "max-w-[1180px]",
           )}
         >
@@ -157,65 +124,80 @@ export function AppShell({
             overridden in that namespace — a plain w-[…] loses the merge */}
         <SheetContent
           side="left"
-          className="p-0 data-[side=left]:w-[228px] data-[side=left]:border-r-0 lg:hidden"
+          className="bg-sidebar p-0 data-[side=left]:w-[240px] data-[side=left]:border-r lg:hidden"
           showCloseButton={false}
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between px-2 py-2">
-              <Link
-                to="/"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-1"
-              >
-                <Mark size={17} />
-                <span className="text-base font-semibold tracking-brand">spaces</span>
-              </Link>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Close navigation"
-                onClick={() => setMenuOpen(false)}
-              >
-                <XIcon />
-              </Button>
-            </div>
-
-            <nav aria-label="Sections" className="flex flex-1 flex-col gap-3.5 px-2 py-1">
-              {groups().map((group) => (
-                <div key={group.label} className="flex flex-col">
-                  <p className="mb-1 px-2 text-base font-medium text-muted-foreground/70">
-                    {group.label}
-                  </p>
-                  {group.items.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      item={item}
-                      active={item.match(path)}
-                      onNavigate={() => setMenuOpen(false)}
-                    />
-                  ))}
-                </div>
-              ))}
-            </nav>
-
-            <div className="p-1.5">
-              <AccountBlock user={user} onSignOut={onSignOut} />
-            </div>
-          </div>
+          <SidebarContent
+            user={user}
+            path={path}
+            onSignOut={onSignOut}
+            onNavigate={() => setMenuOpen(false)}
+          />
         </SheetContent>
       </Sheet>
     </div>
   );
 }
 
-function Brand() {
+function SidebarContent({
+  user,
+  path,
+  onSignOut,
+  onNavigate,
+}: {
+  user: AuthUser;
+  path: string;
+  onSignOut: () => void;
+  onNavigate?: () => void;
+}) {
+  const groups = user.admin ? [...GROUPS, ...ADMIN_GROUP] : GROUPS;
+
   return (
-    <div className="flex h-10 shrink-0 items-center px-2">
-      <Link to="/" className="flex items-center gap-2 px-1" aria-label="spaces home">
-        <Mark size={17} />
-        <span className="text-base font-semibold tracking-brand text-foreground">spaces</span>
-      </Link>
+    <div className="flex h-full w-full flex-col">
+      <div className="px-3 pt-3 pb-2">
+        <Link
+          to="/"
+          onClick={onNavigate}
+          aria-label="spaces home"
+          className="flex items-center gap-2.5 rounded-lg p-1.5 transition-colors hover:text-foreground"
+        >
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-secondary text-foreground">
+            <Mark size={15} />
+          </span>
+          <span className="truncate text-lg font-semibold tracking-brand text-foreground">
+            spaces
+          </span>
+        </Link>
+      </div>
+
+      <nav aria-label="Sections" className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-2">
+        {groups.map((group) => (
+          <div key={group.label} className="flex flex-col gap-0.5">
+            <p className="mb-1 px-2.5 text-2xs font-medium tracking-caps text-muted-foreground uppercase">
+              {group.label}
+            </p>
+            {group.items.map((item) => (
+              <NavLink
+                key={item.to}
+                item={item}
+                active={item.match(path)}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        ))}
+      </nav>
+
+      <div className="flex flex-col gap-2 p-3">
+        <p className="flex items-center gap-2 px-2.5 text-xs text-muted-foreground">
+          <kbd className="rounded-sm border bg-card px-1.5 py-0.5 font-mono text-2xs text-foreground">
+            D
+          </kbd>
+          theme
+        </p>
+        <AccountCard user={user} onSignOut={onSignOut} />
+      </div>
     </div>
   );
 }
@@ -237,15 +219,15 @@ function NavLink({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-base font-medium transition-colors duration-150",
+        "group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-base transition-colors duration-150",
         active
-          ? "bg-secondary text-foreground"
-          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+          ? "bg-accent font-medium text-foreground"
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
       <Icon
         className={cn(
-          "size-3.5 shrink-0 transition-colors",
+          "size-4 shrink-0 transition-colors",
           active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
         )}
       />
@@ -254,7 +236,7 @@ function NavLink({
   );
 }
 
-function AccountBlock({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
+function AccountCard({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
   // The email is the identity here; a display name is decoration on top of it.
   const initials = user.email
     .split(/[\s@._-]+/)
@@ -264,20 +246,16 @@ function AccountBlock({ user, onSignOut }: { user: AuthUser; onSignOut: () => vo
     .join("");
 
   return (
-    <div className="flex items-center gap-2 rounded-md px-1.5 py-1">
-      <Avatar className="size-7 shrink-0">
+    <div className="flex items-center gap-2.5 rounded-lg border bg-background/60 p-2">
+      <Avatar className="size-8 shrink-0">
         <AvatarFallback className="bg-secondary text-foreground">{initials || "SP"}</AvatarFallback>
       </Avatar>
 
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 truncate text-foreground" title={user.email}>
-          <span className="truncate">{user.email}</span>
-          {user.admin && (
-            <Badge variant="primary-light" size="xs" radius="full" title="Admin">
-              admin
-            </Badge>
-          )}
+        <p className="truncate text-base text-foreground" title={user.email}>
+          {user.email}
         </p>
+        <p className="text-xs text-muted-foreground">{user.admin ? "Admin" : "Member"}</p>
       </div>
 
       <Tooltip>

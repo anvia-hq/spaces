@@ -10,7 +10,7 @@ lives in `deploy/guest`.
 
 ```
 apps/api/     Hono API, the REST surface, one module per feature
-apps/web/     React console (Vite, TanStack Router, Base UI, shadcn + ReUI)
+apps/web/     React console (Vite, TanStack Router, Base UI, shadcn)
 packages/db/  Drizzle + Postgres, migrations in drizzle/
 packages/shared/  the wire: zod request/response schemas, no imports but zod
 docs/         decisions and the endpoint reference
@@ -114,8 +114,8 @@ Dependency direction: `driver` ← everything; `sandboxes` ← `files`, `command
 ```
 src/routes/         thin pages: read params, compose module components, no business logic
 src/modules/<name>/ feature code: components/, hooks/, types.ts, plus a helper file when needed
-src/components/     feature-agnostic UI: console/ (button, panel, tabs, notice, …), ui/ (shadcn),
-                    reui/ (registry components) — vendored ones are re-installed, not hand-edited
+src/components/     feature-agnostic UI: console/ (button, panel, tabs, notice, data-table, …), ui/ (stock
+                    shadcn, installed with the CLI — re-add to update, do not hand-edit)
 src/lib/            singletons and thin clients: api.ts, format.ts, use-poll.ts, utils.ts
 ```
 

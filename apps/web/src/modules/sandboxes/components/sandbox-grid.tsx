@@ -1,21 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useTable } from "@tanstack/react-table";
-import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import type { MachineSize, Sandbox } from "@spaces/shared/sandbox";
 import { ArrowUpRight, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/console/confirm-dialog";
+import { DataTable } from "@/components/console/data-table";
 import { StateBadge } from "@/components/console/state-badge";
-import {
-  DataGrid,
-  DataGridContainer,
-  dataGridFeatures,
-  type DataGridFeatures,
-} from "@/components/reui/data-grid/data-grid";
-import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
-import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
-import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -39,11 +30,9 @@ export function SandboxGrid({
   busy: string | null;
   act: Act;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: "created", desc: true }]);
-  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 12 });
   const [pendingDelete, setPendingDelete] = useState<Sandbox | null>(null);
 
-  const columns = useMemo<ColumnDef<DataGridFeatures, Sandbox>[]>(
+  const columns = useMemo<ColumnDef<Sandbox, unknown>[]>(
     () => [
       {
         id: "name",
@@ -241,26 +230,15 @@ export function SandboxGrid({
     [act, busy],
   );
 
-  const table = useTable({
-    features: dataGridFeatures,
-    columns,
-    data: rows,
-    getRowId: (row: Sandbox) => row.id,
-    state: { sorting, pagination },
-    onSortingChange: setSorting,
-    onPaginationChange: setPagination,
-  });
-
   return (
-    <DataGrid table={table} recordCount={rows.length} tableLayout={{ dense: true }}>
-      <div className="flex w-full flex-col gap-2.5">
-        <DataGridContainer className="rounded-xl border border-border bg-card/40">
-          <DataGridScrollArea>
-            <DataGridTable />
-          </DataGridScrollArea>
-        </DataGridContainer>
-        <DataGridPagination />
-      </div>
+    <>
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        initialSorting={[{ id: "created", desc: true }]}
+        pageSize={12}
+      />
 
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -284,6 +262,6 @@ export function SandboxGrid({
           ).then(() => setPendingDelete(null));
         }}
       />
-    </DataGrid>
+    </>
   );
 }

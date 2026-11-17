@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, RefreshCw } from "lucide-react";
+import { Boxes, Plus, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/console/page-header";
-import { Alert, AlertDescription, AlertTitle } from "@/components/reui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CreateSandboxDialog } from "@/modules/sandboxes/components/create-sandbox-dialog.tsx";
@@ -25,6 +25,7 @@ function SandboxesPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Sandboxes"
+        icon={<Boxes />}
         actions={
           <>
             <Button

@@ -1,14 +1,13 @@
 import type { SandboxState } from "@spaces/shared/sandbox";
-import { Badge } from "@/components/reui/badge";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 type Tone = {
-  variant: "secondary" | "outline" | "destructive-light";
+  variant: "secondary" | "outline" | "destructive";
   dot: string;
   live?: boolean;
 };
 
-// Monochrome: state reads from the dot (solid, dim, pulsing), not from hue.
 const TONES: Record<SandboxState, Tone> = {
   init: { variant: "outline", dot: "bg-muted-foreground/50" },
   provisioning: { variant: "outline", dot: "bg-muted-foreground", live: true },
@@ -19,7 +18,7 @@ const TONES: Record<SandboxState, Tone> = {
   running: { variant: "secondary", dot: "bg-foreground", live: true },
   archiving: { variant: "outline", dot: "bg-muted-foreground", live: true },
   archived: { variant: "outline", dot: "bg-muted-foreground/50" },
-  error: { variant: "destructive-light", dot: "bg-destructive" },
+  error: { variant: "destructive", dot: "bg-destructive" },
   cancelled: { variant: "outline", dot: "bg-muted-foreground/40" },
 };
 
@@ -28,9 +27,7 @@ export function StateBadge({ state, className }: { state: SandboxState; classNam
   return (
     <Badge
       variant={tone.variant}
-      size="sm"
-      radius="full"
-      className={cn("gap-1.5 text-base tracking-tight", className)}
+      className={cn("gap-1.5 rounded-full text-sm tracking-tight", className)}
     >
       <span
         aria-hidden

@@ -62,7 +62,7 @@ export function AuthScreen() {
       <div className="relative w-full max-w-[400px]">
         <div className="mb-7 flex flex-col items-center gap-3 text-center">
           <Mark size={38} />
-          <span className="text-base font-semibold tracking-heading text-foreground">spaces</span>
+          <span className="text-lg font-semibold tracking-heading text-foreground">spaces</span>
         </div>
 
         {/* No heading, no subline, no card: the fields are the screen. Which

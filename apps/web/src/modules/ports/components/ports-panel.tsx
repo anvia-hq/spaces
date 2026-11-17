@@ -5,7 +5,8 @@ import { EmptyState } from "@/components/console/empty-state";
 import { Notice } from "@/components/console/notice";
 import { Panel } from "@/components/console/panel";
 import { Skeleton } from "@/components/console/skeleton";
-import { Badge } from "@/components/reui/badge";
+import { Badge } from "@/components/ui/badge";
+import { TONE_CLASS } from "@/components/console/tone.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -122,7 +123,6 @@ export function PortsPanel({ sandboxId, live }: { sandboxId: string; live: boole
               <Badge
                 key={reservedPort}
                 variant="outline"
-                size="sm"
                 className="font-normal text-muted-foreground"
               >
                 :{reservedPort}
@@ -171,9 +171,8 @@ export function PortsPanel({ sandboxId, live }: { sandboxId: string; live: boole
                 </span>
                 <span className="text-base text-muted-foreground">host {published.hostPort}</span>
                 <Badge
-                  variant={published.access === "public" ? "warning-light" : "outline"}
-                  size="xs"
-                  radius="full"
+                  variant="outline"
+                  className={published.access === "public" ? TONE_CLASS.warning : undefined}
                 >
                   {published.access}
                 </Badge>

@@ -24,6 +24,7 @@ export function MembersPage({ self }: { self: string | null }) {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Members"
+        icon={<Users />}
         actions={<MetaLine items={[members.loading ? "loading" : `${members.total} accounts`]} />}
       />
 

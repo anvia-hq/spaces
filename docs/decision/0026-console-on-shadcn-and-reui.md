@@ -1,6 +1,6 @@
 # 0026 — Console on shadcn/ui primitives and the free ReUI set
 
-- **Status:** accepted (supersedes parts of 0023)
+- **Status:** accepted (supersedes parts of 0023; ReUI and the token vocabulary superseded in part by 0039)
 - **Date:** 2026-11-15
 
 ## Context

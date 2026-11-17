@@ -1,17 +1,8 @@
-import { useMemo, useState } from "react";
-import { useTable } from "@tanstack/react-table";
-import type { ColumnDef, PaginationState } from "@tanstack/react-table";
+import { useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { CopyButton } from "@/components/console/copy-button";
+import { DataTable } from "@/components/console/data-table";
 import { StatusBadge } from "@/components/console/status-badge";
-import {
-  DataGrid,
-  DataGridContainer,
-  dataGridFeatures,
-  type DataGridFeatures,
-} from "@/components/reui/data-grid/data-grid";
-import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
-import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
-import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import type { AuditEntry } from "@/lib/api.ts";
 import { fmtDuration, timeAgo } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
@@ -24,9 +15,7 @@ import { cn } from "@/lib/utils";
  * give each fact a home: what happened, who did it, to what, and how it ended.
  */
 export function AuditGrid({ entries }: { entries: AuditEntry[] }) {
-  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 25 });
-
-  const columns = useMemo<ColumnDef<DataGridFeatures, AuditEntry>[]>(
+  const columns = useMemo<ColumnDef<AuditEntry, unknown>[]>(
     () => [
       {
         id: "at",
@@ -138,25 +127,5 @@ export function AuditGrid({ entries }: { entries: AuditEntry[] }) {
     [],
   );
 
-  const table = useTable({
-    features: dataGridFeatures,
-    columns,
-    data: entries,
-    getRowId: (row: AuditEntry) => row.id,
-    state: { pagination },
-    onPaginationChange: setPagination,
-  });
-
-  return (
-    <DataGrid table={table} recordCount={entries.length} tableLayout={{ dense: true }}>
-      <div className="flex w-full flex-col gap-2.5">
-        <DataGridContainer className="rounded-xl border border-border bg-card/40">
-          <DataGridScrollArea>
-            <DataGridTable />
-          </DataGridScrollArea>
-        </DataGridContainer>
-        <DataGridPagination />
-      </div>
-    </DataGrid>
-  );
+  return <DataTable columns={columns} data={entries} getRowId={(row) => row.id} pageSize={25} />;
 }

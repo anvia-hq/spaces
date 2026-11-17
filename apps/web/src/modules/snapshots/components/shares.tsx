@@ -1,5 +1,6 @@
 import { CopyButton } from "@/components/console/copy-button";
-import { Badge } from "@/components/reui/badge";
+import { Badge } from "@/components/ui/badge";
+import { TONE_CLASS } from "@/components/console/tone.ts";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { timeAgo } from "@/lib/format.ts";
@@ -47,9 +48,8 @@ export function Shares({ name }: { name: string }) {
             <li key={share.id} className="flex items-center gap-2 py-1.5">
               <code className="text-base text-foreground/90">{share.codePrefix}…</code>
               <Badge
-                variant={share.status === "active" ? "primary-light" : "outline"}
-                size="xs"
-                radius="full"
+                variant="outline"
+                className={share.status === "active" ? TONE_CLASS.accent : undefined}
               >
                 {share.status}
               </Badge>

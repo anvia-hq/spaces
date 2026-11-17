@@ -1,4 +1,4 @@
-import { History, RefreshCw, Search } from "lucide-react";
+import { History, RefreshCw, ScrollText, Search } from "lucide-react";
 import { EmptyState } from "@/components/console/empty-state";
 import { Notice } from "@/components/console/notice";
 import { PageHeader } from "@/components/console/page-header";
@@ -22,6 +22,7 @@ export function AuditPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Audit log"
+        icon={<ScrollText />}
         actions={
           <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
             <RefreshCw className={cn(loading && "animate-spin")} />

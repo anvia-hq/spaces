@@ -6,65 +6,135 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Monochrome. Neutral greys, white as the only accent. Hierarchy comes from
- * luminance, weight and hairlines, never hue. The one exception is
- * `destructive`, kept as a muted red so failures stay unmistakable.
+ * Color follows the Anvia design system (anvia-hq/anvia-product-system,
+ * design-system.md §3–§4). Zinc is the only UI neutral; hue appears only where
+ * it carries meaning (status, charts, the destructive action). Components
+ * consume the shadcn names below, which alias the --ops-* semantic layer, which
+ * alias the Zinc primitives. Nothing outside this block names a raw color.
  *
- * The base is grey (#1a1a1a), not black: pure black flattens every surface into
- * the void, so cards and hairlines have to fight upward to be seen. A grey base
- * lets them sit a step above it, and keeps the one accent at usable contrast.
- * ReUI and shadcn primitives read the token names below.
+ * Dark is the first-visit default and the theme never follows the OS; the
+ * choice lives in localStorage under `anvia-theme` (see lib/theme.ts).
  */
 :root {
+  --black: #000000;
+  --white: #ffffff;
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+  --zinc-950: #09090b;
+
+  --ops-bg: var(--black);
+  --ops-sheet: var(--zinc-950);
+  --ops-card: var(--zinc-900);
+  --ops-ink: var(--zinc-300);
+  --ops-muted: var(--zinc-500);
+  --ops-dim: var(--zinc-700);
+  --ops-line: var(--zinc-800);
+  --ops-strong: var(--white);
+  --ops-strong-text: var(--zinc-950);
+  --ops-secondary: var(--zinc-800);
+  --ops-control-active: var(--zinc-950);
+  --ops-row-selected: var(--zinc-900);
+  --ops-nav-active: var(--zinc-900);
+  --ops-status-success: #4fc77a;
+  --ops-status-danger: #db5b5b;
+  --ops-status-warning: #d8a640;
+  --ops-status-info: #5b8def;
+  --ops-viz-blue: #5b8def;
+  --ops-viz-gold: #d8a640;
+  --ops-viz-red: #db5b5b;
+  --ops-viz-green: #4fc77a;
+  --ops-viz-neutral: var(--zinc-500);
+  --ops-scrim: rgb(0 0 0 / 0.55);
+
   color-scheme: dark;
+}
 
-  --background: #1a1a1a;
-  --foreground: #ededed;
+:root[data-theme="light"] {
+  --ops-bg: var(--zinc-100);
+  --ops-sheet: var(--zinc-50);
+  --ops-card: var(--zinc-100);
+  --ops-ink: var(--zinc-900);
+  --ops-muted: var(--zinc-600);
+  --ops-dim: var(--zinc-400);
+  --ops-line: var(--zinc-300);
+  --ops-strong: var(--zinc-900);
+  --ops-strong-text: var(--zinc-50);
+  --ops-secondary: var(--zinc-200);
+  --ops-control-active: var(--zinc-200);
+  --ops-row-selected: var(--zinc-200);
+  --ops-nav-active: var(--zinc-100);
+  --ops-status-success: #1f7a43;
+  --ops-status-danger: #b42f2f;
+  --ops-status-warning: #8a5f0c;
+  --ops-status-info: #1d4fb8;
+  --ops-viz-blue: #2563eb;
+  --ops-viz-gold: #b7862a;
+  --ops-viz-red: #c2413f;
+  --ops-viz-green: #1f8f4e;
+  --ops-scrim: rgb(9 9 11 / 0.3);
 
-  --card: #212121;
-  --card-foreground: #ededed;
-  --popover: #262626;
-  --popover-foreground: #ededed;
+  color-scheme: light;
+}
 
-  --primary: #ededed;
-  --primary-foreground: #0a0a0a;
+:root {
+  --background: var(--ops-bg);
+  --foreground: var(--ops-ink);
 
-  --secondary: #2a2a2a;
-  --secondary-foreground: #ededed;
+  --card: var(--ops-card);
+  --card-foreground: var(--ops-ink);
+  --popover: var(--ops-sheet);
+  --popover-foreground: var(--ops-ink);
 
-  --muted: #242424;
-  --muted-foreground: #a3a3a3;
+  --primary: var(--ops-strong);
+  --primary-foreground: var(--ops-strong-text);
 
-  --accent: #2e2e2e;
-  --accent-foreground: #ededed;
+  --secondary: var(--ops-secondary);
+  --secondary-foreground: var(--ops-ink);
 
-  --destructive: #e5484d;
-  --destructive-foreground: #ffffff;
+  --muted: var(--ops-card);
+  --muted-foreground: var(--ops-muted);
 
-  --success: #ededed;
-  --success-foreground: #0a0a0a;
-  --warning: #b4b4b4;
-  --warning-foreground: #0a0a0a;
-  --info: #a3a3a3;
-  --info-foreground: #0a0a0a;
+  --accent: var(--ops-nav-active);
+  --accent-foreground: var(--ops-ink);
 
-  --border: #3a3a3a;
-  --input: #4a4a4a;
-  --ring: #6b6b6b;
+  --destructive: var(--ops-status-danger);
+  --destructive-foreground: var(--white);
 
-  --chart-1: #ededed;
-  --chart-2: #b4b4b4;
-  --chart-3: #8f8f8f;
-  --chart-4: #7a7a7a;
-  --chart-5: #4f4f4f;
+  --success: var(--ops-status-success);
+  --success-foreground: var(--ops-strong-text);
+  --warning: var(--ops-status-warning);
+  --warning-foreground: var(--ops-strong-text);
+  --info: var(--ops-status-info);
+  --info-foreground: var(--ops-strong-text);
 
-  --radius: 0.5rem;
+  --border: var(--ops-line);
+  --input: var(--ops-line);
+  --ring: var(--ops-muted);
 
-  --invert: #ededed;
-  --invert-foreground: #0a0a0a;
+  --sidebar: var(--ops-sheet);
+  --sidebar-foreground: var(--ops-ink);
 
-  --focus: #ededed;
-  --focus-foreground: #0a0a0a;
+  --chart-1: var(--ops-viz-blue);
+  --chart-2: var(--ops-viz-gold);
+  --chart-3: var(--ops-viz-red);
+  --chart-4: var(--ops-viz-green);
+  --chart-5: var(--ops-viz-neutral);
+
+  --radius: 0.375rem;
+
+  --invert: var(--ops-strong);
+  --invert-foreground: var(--ops-strong-text);
+
+  --focus: var(--ops-ink);
+  --focus-foreground: var(--ops-sheet);
 }
 
 @theme {
@@ -81,28 +151,28 @@
 
   --ease-out-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
 
-  /* ---- One size -----------------------------------------------------------
-   * Every text token resolves to the same value — ours and Tailwind's alike —
-   * so the interface has exactly one type size until each element is decided
-   * on its own. Change --text-base and the whole app follows, because nothing
-   * else declares a size.
+  /* ---- Type scale ---------------------------------------------------------
+   * 14px is the reading size: body, table cells, form fields. Everything
+   * smaller is metadata (captions, table headers, group labels); everything
+   * larger is a title. Headings are the only thing that steps up, so a page
+   * has one clear entry point instead of a row of equal-weight labels.
    */
-  --text-base: 1rem; /* 14px */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
   --text-base--line-height: 1.5;
-  --text-2xs: 1rem;
-  --text-2xs--line-height: 1.5;
-  --text-xs: 1rem;
-  --text-xs--line-height: 1.5;
-  --text-sm: 1rem;
-  --text-sm--line-height: 1.5;
   --text-lg: 1rem;
-  --text-lg--line-height: 1.5;
-  --text-xl: 1rem;
-  --text-xl--line-height: 1.5;
-  --text-2xl: 1rem;
-  --text-2xl--line-height: 1.5;
-  --text-3xl: 1rem;
-  --text-3xl--line-height: 1.5;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.25rem;
 
   /* Tracking the scale cannot express on its own. */
   --tracking-heading: -0.035em;
@@ -145,6 +215,8 @@
   --color-invert: var(--invert);
   --color-invert-foreground: var(--invert-foreground);
   --color-focus: var(--focus);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
   --color-focus-foreground: var(--focus-foreground);
 
   --radius-sm: calc(var(--radius) - 4px);

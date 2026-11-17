@@ -125,7 +125,7 @@ export function CreateSandboxDialog({
                       "flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
                       active
                         ? "border-primary bg-primary/10"
-                        : "border-border bg-card/60 hover:border-border hover:bg-accent/40",
+                        : "border-border bg-card/60 hover:border-border hover:text-foreground",
                     )}
                   >
                     <span className="flex items-center justify-between gap-2">

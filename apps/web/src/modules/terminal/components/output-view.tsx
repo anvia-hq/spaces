@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Frame, FramePanel } from "@/components/reui/frame";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 function fmtBytesLocal(bytes: number): string {
@@ -47,8 +47,8 @@ export function OutputView({
   const empty = !stdout && !stderr;
 
   return (
-    <Frame spacing="xs" className="w-full">
-      <FramePanel className="p-0">
+    <Card size="sm" className="gap-0 p-0 w-full">
+      <div className="p-0">
         <div className="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-1.5">
           <span className="flex items-center gap-1.5 text-base tracking-wide text-muted-foreground">
             {running ? (
@@ -86,7 +86,7 @@ export function OutputView({
             </>
           )}
         </pre>
-      </FramePanel>
-    </Frame>
+      </div>
+    </Card>
   );
 }

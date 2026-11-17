@@ -1,17 +1,8 @@
-import { useMemo, useState } from "react";
-import { useTable } from "@tanstack/react-table";
-import type { ColumnDef, PaginationState } from "@tanstack/react-table";
+import { useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { ChevronRight } from "lucide-react";
+import { DataTable } from "@/components/console/data-table";
 import { StatusBadge } from "@/components/console/status-badge";
-import {
-  DataGrid,
-  DataGridContainer,
-  dataGridFeatures,
-  type DataGridFeatures,
-} from "@/components/reui/data-grid/data-grid";
-import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
-import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
-import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { fmtDuration, timeAgo } from "@/lib/format.ts";
 import type { TraceSummary } from "@/lib/api.ts";
 
@@ -31,9 +22,7 @@ export function TracesGrid({
   traces: TraceSummary[];
   onOpen: (trace: TraceSummary) => void;
 }) {
-  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 25 });
-
-  const columns = useMemo<ColumnDef<DataGridFeatures, TraceSummary>[]>(
+  const columns = useMemo<ColumnDef<TraceSummary, unknown>[]>(
     () => [
       {
         id: "route",
@@ -108,31 +97,14 @@ export function TracesGrid({
     [],
   );
 
-  const table = useTable({
-    features: dataGridFeatures,
-    columns,
-    data: traces,
-    getRowId: (row: TraceSummary) => row.traceId,
-    state: { pagination },
-    onPaginationChange: setPagination,
-  });
-
   return (
-    <DataGrid
-      table={table}
-      recordCount={traces.length}
-      tableLayout={{ dense: true }}
-      onRowClick={(trace: TraceSummary) => onOpen(trace)}
-    >
-      <div className="flex w-full flex-col gap-2.5">
-        <DataGridContainer className="rounded-xl border border-border bg-card/40">
-          <DataGridScrollArea>
-            <DataGridTable />
-          </DataGridScrollArea>
-        </DataGridContainer>
-        <DataGridPagination />
-      </div>
-    </DataGrid>
+    <DataTable
+      columns={columns}
+      data={traces}
+      getRowId={(row) => row.traceId}
+      onRowClick={onOpen}
+      pageSize={25}
+    />
   );
 }
 
