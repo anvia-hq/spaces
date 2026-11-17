@@ -12,6 +12,7 @@ process.env.SPACES_DRIVER = "mock";
 process.env.SPACES_DATABASE_URL =
   process.env.SPACES_TEST_DATABASE_URL ?? "postgres://localhost:5432/spaces_test";
 process.env.SPACES_API_KEY = "test_key";
+process.env.SPACES_MAX_SANDBOXES = "512";
 process.env.SPACES_PREPUBLISH_PORTS = "";
 process.env.SPACES_BOOTSTRAP = "";
 process.env.SPACES_NET = "public";

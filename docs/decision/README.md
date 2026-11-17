@@ -45,6 +45,7 @@ out. Numbers quoted are measured, not estimated.
 | [0035](./0035-starter-guest-image.md)                      | A starter guest image with the toolchain baked in                      | accepted, narrows 0016             |
 | [0036](./0036-github-login-from-the-environment.md)        | GitHub sign-in, configured from the environment                        | accepted                           |
 | [0037](./0037-admin-role-for-operators.md)                 | The admin role: an operator is an account, not only a secret           | accepted, extends 0028 and 0034    |
+| [0038](./0038-create-from-a-saved-snapshot.md)             | Create a sandbox from a saved snapshot                                 | accepted                           |
 
 ## Reading order
 
@@ -59,7 +60,7 @@ Changing a specific area? Jump straight to the relevant record:
 | API surface, status codes, errors    | 0002, 0003, 0005, 0021       |
 | Files, transfers, path handling      | 0008, 0009, 0010             |
 | Commands, processes, streaming       | 0012                         |
-| Snapshots, forks, sharing            | 0011, 0018, 0019             |
+| Snapshots, forks, sharing            | 0011, 0018, 0019, 0038       |
 | Networking, ports, SSH, remote hosts | 0013, 0014, 0015, 0017, 0022 |
 | Storage, metering, state             | 0006, 0020, 0030             |
 | Machine sizes, capacity, presets     | 0034, 0037                   |

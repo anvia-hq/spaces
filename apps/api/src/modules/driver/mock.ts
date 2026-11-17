@@ -1,5 +1,5 @@
 import type { FileEntry, FileMatch } from "@spaces/shared/files";
-import { DriverUnsupported } from "../../errors.ts";
+import { DriverFailure, DriverUnsupported } from "../../errors.ts";
 import type {
   CreateOptions,
   DriverHandle,
@@ -8,6 +8,9 @@ import type {
   MachineSpec,
   SandboxDriver,
 } from "./types.ts";
+
+/** Every successful restore, in order, so a test can see which disk booted. */
+export const mockRestores: { sandboxId: string; fromRef: string }[] = [];
 
 /**
  * In-process driver. No KVM, no SSH — it models the lifecycle so the API and
@@ -21,6 +24,8 @@ export class MockDriver implements SandboxDriver {
 
   /** ref -> booted, at the size the caller resolved. */
   private live = new Map<string, { size: MachineSpec; bootedAt: number }>();
+
+  private snapshots = new Set<string>();
 
   private async jitter(ms = 120) {
     await Bun.sleep(ms + Math.random() * ms);
@@ -50,6 +55,18 @@ export class MockDriver implements SandboxDriver {
     return this.handle(o.sandboxId);
   }
 
+  async restore(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
+    await this.jitter(150);
+
+    if (!this.snapshots.has(o.fromRef)) {
+      throw new DriverFailure(`mock: no snapshot disk ${o.fromRef}`);
+    }
+
+    this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    mockRestores.push({ sandboxId: o.sandboxId, fromRef: o.fromRef });
+    return this.handle(o.sandboxId);
+  }
+
   async stop(sandboxId: string): Promise<{ diskRef: string }> {
     await this.jitter(60);
     this.live.delete(sandboxId);
@@ -63,11 +80,14 @@ export class MockDriver implements SandboxDriver {
 
   async snapshot(_sandboxId: string, snapshotId: string) {
     await this.jitter(90);
-    return { ref: `mock://snap/${snapshotId}`, sizeBytes: 30 * 1024 * 1024 };
+    const ref = `mock://snap/${snapshotId}`;
+    this.snapshots.add(ref);
+    return { ref, sizeBytes: 30 * 1024 * 1024 };
   }
 
-  async destroySnapshot(_ref: string): Promise<void> {
+  async destroySnapshot(ref: string): Promise<void> {
     await this.jitter(30);
+    this.snapshots.delete(ref);
   }
 
   async isRunning(ref: string): Promise<boolean> {

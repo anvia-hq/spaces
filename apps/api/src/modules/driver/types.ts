@@ -86,6 +86,8 @@ export interface SandboxDriver {
   resume(options: CreateOptions & { fromRef: string }): Promise<DriverHandle>;
   /** Clone an existing disk image into a new machine (boat `fork`). */
   fork(options: CreateOptions & { fromRef: string }): Promise<DriverHandle>;
+  /** Boot a new sandbox from a snapshot artifact's disk, leaving the snapshot intact. */
+  restore(options: CreateOptions & { fromRef: string }): Promise<DriverHandle>;
 
   /** Flush state, stop the machine, and return the disk ref to boot from later. */
   stop(sandboxId: string): Promise<{ diskRef: string }>;

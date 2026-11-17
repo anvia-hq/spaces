@@ -48,16 +48,24 @@ sandbox can be created at. Routes for a capability this deployment does not run 
 earlier version are accepted rather than rejected, and recorded in
 [decision 0021](./decision/0021-extensions-and-honest-refusals.md):
 
-| Field                                                                                                                         | Status                                                                                                                                 |
-| ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`, `ttlSeconds`, `labels`, `env`, `name`                                                                                 | **Honoured.** `ttlSeconds: null` (or the legacy `"infinite"`) disables auto-stop; `env` is injected into the guest                     |
-| `from`                                                                                                                        | **Honoured** for a sandbox id. A saved-snapshot name or `bsh_` code answers `404 snapshot_not_found` rather than silently cold-booting |
-| `setupScript`                                                                                                                 | **Honoured**: runs once after `ready` as `user`; the outcome is recorded as a `sandbox.setup_script` event                             |
-| `environment`, `noEnv`, `visibility`, `snapshots`, `monitoring`, `failFast`, `count`, `hostedPorts`, `files`, `org`, `teamId` | **Accepted and ignored.** Write `files` with `PUT /sandboxes/{id}/files`; publish `hostedPorts` with `POST /sandboxes/{id}/host`       |
+| Field                                                                                                                         | Status                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`, `ttlSeconds`, `labels`, `env`, `name`                                                                                 | **Honoured.** `ttlSeconds: null` (or the legacy `"infinite"`) disables auto-stop; `env` is injected into the guest                        |
+| `from`                                                                                                                        | **Honoured** for a sandbox id (fork its disk) or a saved snapshot name visible to the caller (restore its disk). Never a silent cold boot |
+| `setupScript`                                                                                                                 | **Honoured**: runs once after `ready` as `user`; the outcome is recorded as a `sandbox.setup_script` event                                |
+| `environment`, `noEnv`, `visibility`, `snapshots`, `monitoring`, `failFast`, `count`, `hostedPorts`, `files`, `org`, `teamId` | **Accepted and ignored.** Write `files` with `PUT /sandboxes/{id}/files`; publish `hostedPorts` with `POST /sandboxes/{id}/host`          |
 
 `POST /sandboxes/{id}/resume` takes `ttlSeconds` (resets the auto-stop timer from the resume, not from
 the original create), `type` (moves the sandbox to another size) and `name`, and accepts the other
 tolerated fields unchanged.
+
+**Creating from a saved snapshot.** `from` may name a saved snapshot the caller can see. The new
+sandbox gets its own `type`, `env`, `labels`, `ttlSeconds` and `setupScript`, and boots from a copy of
+the saved disk; the saved snapshot and its artifact are not consumed. An unknown or inaccessible name,
+a `bsh_` code, or a missing artifact answers `404 snapshot_not_found`; a saved snapshot still `saving`
+or `failed`, or one whose artifact is not ready, answers `409 snapshot_not_ready`. Spaces imposes no
+lifetime of its own on a saved snapshot — deleting it is the caller's job (decision
+[0038](./decision/0038-create-from-a-saved-snapshot.md)).
 
 ### `type` is a machine size name
 

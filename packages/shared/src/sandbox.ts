@@ -156,9 +156,10 @@ export const CreateSandboxRequest = z
     /** Run once after ready, as the sandbox user. Output goes to the event log. */
     setupScript: z.string().max(65536).optional(),
     /**
-     * Fork source: a sandbox id, or a saved snapshot name / `bsh_` share code as
-     * the spec allows. Anything that does not resolve to a usable disk is a 404,
-     * never a silent cold boot.
+     * Source of the new sandbox: a live sandbox id (fork its disk) or a saved
+     * snapshot name (boot a new sandbox from that disk). A source that cannot
+     * be used is refused; it is never a silent cold boot. Share codes are not
+     * a create source (decision 0038).
      */
     from: z.string().min(1).optional(),
 

@@ -93,9 +93,10 @@ exec sh -c "$s"
  * (`msb`), which runs microVMs on libkrun.
  *
  * Lifecycle maps directly onto msb: `create` boots from an OCI image,
- * `stop`/`resume` are msb stop/start, and `fork` uses msb's copy-on-write
- * child sandboxes. File operations ride on `msb exec`, so they work identically
- * whether msb runs locally or over SSH.
+ * `stop`/`resume` are msb stop/start, `fork` uses msb's copy-on-write
+ * child sandboxes, and `restore` boots a snapshot's disk into a new sandbox.
+ * File operations ride on `msb exec`, so they work identically whether msb
+ * runs locally or over SSH.
  */
 export class MicrosandboxDriver implements SandboxDriver {
   readonly kind = "microsandbox";
@@ -145,6 +146,11 @@ export class MicrosandboxDriver implements SandboxDriver {
   /** Refs are `msb:<name>` / `snap:<group>:<name>`; the name is the sandbox id. */
   private nameOf(ref: string): string {
     return ref.startsWith("msb:") ? ref.slice(4) : ref;
+  }
+
+  /** `msb restore` takes a `group:member` selector, not our `snap:` scheme. */
+  private snapshotSelector(ref: string): string {
+    return ref.startsWith("snap:") ? ref.slice(5) : ref;
   }
 
   /**
@@ -225,6 +231,31 @@ export class MicrosandboxDriver implements SandboxDriver {
       ...this.portArgs(o.ports ?? []),
     ]);
     return { ref: `msb:${o.sandboxId}`, url: null, ip: await this.guestIp(o.sandboxId) };
+  }
+
+  async restore(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
+    try {
+      const { cpus, memory } = this.spec(o.size);
+      await this.msbRun(
+        [
+          "restore",
+          this.snapshotSelector(o.fromRef),
+          "--name",
+          o.sandboxId,
+          "-c",
+          cpus,
+          "-m",
+          memory,
+          ...this.portArgs(o.ports ?? []),
+        ],
+        this.timeoutMs,
+      );
+      await this.guest(`msb:${o.sandboxId}`, GUEST_INIT, [], { runAs: "root" }).catch(() => {});
+      return { ref: `msb:${o.sandboxId}`, url: null, ip: await this.guestIp(o.sandboxId) };
+    } catch (error) {
+      await this.destroy(o.sandboxId).catch(() => {});
+      throw error;
+    }
   }
 
   async stop(sandboxId: string): Promise<{ diskRef: string }> {
@@ -399,8 +430,7 @@ export class MicrosandboxDriver implements SandboxDriver {
    * scheme.
    */
   async restoreTemporary(fromRef: string, name: string): Promise<{ ref: string }> {
-    const selector = fromRef.startsWith("snap:") ? fromRef.slice(5) : fromRef;
-    await this.msbRun(["restore", selector, "--name", name], this.timeoutMs);
+    await this.msbRun(["restore", this.snapshotSelector(fromRef), "--name", name], this.timeoutMs);
     return { ref: `msb:${name}` };
   }
 
