@@ -137,7 +137,7 @@ export const config = {
     /**
      * GitHub OAuth. Registered only when both halves are set: half a pair
      * cannot complete a sign-in, and the console hides the button on the same
-     * signal (docs/decision/0034).
+     * signal (docs/decision/0036).
      */
     github: {
       enabled: githubClientId !== "" && githubClientSecret !== "",

@@ -221,7 +221,9 @@ Routes that older clients still call but that nothing here can back answer
 
 ## Accounts and keys
 
-People sign in with an email and password; sandboxes and snapshots belong to whoever made them.
+People sign in with an email and password, or with GitHub where the deployment configured an OAuth app
+(`SPACES_GITHUB_CLIENT_ID` + `SPACES_GITHUB_CLIENT_SECRET`, decision 0036); sandboxes and snapshots
+belong to whoever made them either way.
 
 | Method       | Path                       | Notes                                                              |
 | ------------ | -------------------------- | ------------------------------------------------------------------ |
@@ -229,11 +231,18 @@ People sign in with an email and password; sandboxes and snapshots belong to who
 | `POST`       | `/api/auth/sign-in/email`  | `{ email, password }`                                              |
 | `POST`       | `/api/auth/sign-out`       | Clears the cookie                                                  |
 | `GET`        | `/api/auth/get-session`    | Who the cookie belongs to                                          |
-| `GET`        | `/api/v1/me`               | `{ principal, operator }` for any accepted credential              |
+| `POST`       | `/api/auth/sign-in/social` | `{ provider, callbackURL }` → GitHub redirect, `404` when unset    |
+| `GET`        | `/api/auth/callback/{id}`  | The provider's callback; lands on `SPACES_AUTH_URL`                |
+| `GET`        | `/api/v1/me`               | `{ principal, operator, login }` for any accepted credential       |
 | `GET`/`POST` | `/api/v1/api-keys`         | List keys, or create one (`{ name }`) — the secret comes back once |
 | `DELETE`     | `/api/v1/api-keys/{keyId}` | Revoke                                                             |
 
 `/api/auth/*` is Better Auth's own surface: its envelopes and cookies, outside the `/api/v1` contract.
+
+`login` is `{ "github": true | false }`: the alternative sign-in providers this deployment has
+credentials for. The console reads it from `/me` because that is the one call it already makes, and
+offers the GitHub button only when it is `true` — a server with no OAuth app answers `404` to
+`/api/auth/sign-in/social`, so a button would be a dead end.
 
 **Credentials, in order of precedence.** A valid session cookie wins; then the operator key
 (`SPACES_API_KEY`), which sees every sandbox and belongs to no account; then a user API key, which sees

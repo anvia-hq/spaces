@@ -744,7 +744,7 @@ export interface AuditEntry {
   metadata: Record<string, unknown>;
 }
 
-/** Non-password sign-in the server can complete (docs/decision/0034). */
+/** Non-password sign-in the server can complete (docs/decision/0036). */
 export type LoginProviders = { github: boolean };
 
 export type MePrincipal =

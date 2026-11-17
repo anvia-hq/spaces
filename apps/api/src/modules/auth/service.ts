@@ -11,7 +11,7 @@ import * as audit from "../audit/service.ts";
  * GitHub is a provider only when the deployment set both halves of the pair:
  * an unset client id or secret leaves the key out of the map, and Better Auth
  * never learns the provider exists. A server with no GitHub app still boots,
- * and email + password still signs people in (docs/decision/0034).
+ * and email + password still signs people in (docs/decision/0036).
  */
 const socialProviders: BetterAuthOptions["socialProviders"] = config.auth.github.enabled
   ? {

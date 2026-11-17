@@ -21,6 +21,8 @@ networking and deployment targets; the architecture behind them is in
 | `SPACES_OTLP_ENDPOINT`             | —                                         | Also export spans to an OTLP collector                              |
 | `SPACES_AUTH_SECRET`               | dev value                                 | Better Auth signing secret; set it in any real deployment           |
 | `SPACES_AUTH_URL`                  | request origin                            | Public origin of the API, for cookies and the origin check          |
+| `SPACES_GITHUB_CLIENT_ID`          | —                                         | GitHub OAuth app client id; unset disables GitHub sign-in           |
+| `SPACES_GITHUB_CLIENT_SECRET`      | —                                         | GitHub OAuth app secret; both halves or neither                     |
 | `SPACES_MAX_SANDBOXES`             | `32`                                      | Admission limit                                                     |
 | `SPACES_NET`                       | `public`                                  | Guest network: `public`, `private`, `host`, `all`, `none`           |
 | `SPACES_NET_RULES`                 | —                                         | `msb --net-rule` entries, e.g. `allow@example.com:tcp:443`          |
@@ -34,6 +36,12 @@ networking and deployment targets; the architecture behind them is in
 
 `SPACES_PUBLIC_URL` must match what the browser sees (`https://…ts.net`): signed download and preview
 URLs are absolute, so a stale `http://` origin points every link at the wrong scheme.
+
+`SPACES_GITHUB_CLIENT_ID` and `SPACES_GITHUB_CLIENT_SECRET` register GitHub as a sign-in provider only
+when **both** are set; either one alone, or both empty, leaves it out and email + password is the only
+way in. The OAuth app's authorization callback URL is `SPACES_AUTH_URL` + `/api/auth/callback/github`.
+See [DEVELOPMENT.md](../DEVELOPMENT.md#github-sign-in) and
+decision [0036](decision/0036-github-login-from-the-environment.md).
 
 `SPACES_BOOTSTRAP` runs as **root** in the guest (it installs packages). To bake tools in instead, build
 a guest image — see [DEVELOPMENT.md](../DEVELOPMENT.md#guest-image).

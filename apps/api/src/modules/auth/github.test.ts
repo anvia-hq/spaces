@@ -7,7 +7,7 @@
  * `config` and the Better Auth instance are built at import time. No case
  * reaches github.com: a sign-in attempt is answered by Better Auth itself —
  * `404` with no provider, a redirect to GitHub's authorize URL with one
- * (docs/decision/0034).
+ * (docs/decision/0036).
  */
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
