@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,13 +8,31 @@
       name="description"
       content="Self-hosted microVM sandboxes with an HTTP API: run commands, read and write files, publish ports, snapshot and fork."
     />
-    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="theme-color" content="#09090b" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta property="og:title" content="spaces — microVM sandboxes" />
     <meta property="og:description" content="Self-hosted microVMs behind an HTTP sandbox API." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/favicon.svg" />
+    <script>
+      (function () {
+        var theme = "dark";
+        try {
+          if (localStorage.getItem("anvia-theme") === "light") theme = "light";
+        } catch (error) {
+          theme = "dark";
+        }
+        var root = document.documentElement;
+        root.dataset.theme = theme;
+        root.classList.toggle("dark", theme === "dark");
+        root.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').content =
+          theme === "light" ? "#f4f4f5" : "#09090b";
+        document.querySelector('link[rel="icon"]').href =
+          theme === "light" ? "/favicon-light.svg" : "/favicon.svg";
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
