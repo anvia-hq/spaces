@@ -6,14 +6,20 @@ import { type ApiEnv, fail } from "./errors.ts";
 import { auth } from "./modules/auth/service.ts";
 import type { AuthUser } from "./modules/auth/types.ts";
 import { operatorScope, runInScope, userScope } from "./scope.ts";
+import { isAdminRole } from "./modules/auth/types.ts";
 
 function bearerOf(header: string | undefined): string {
   return (header ?? "").replace(/^Bearer\s+/i, "").trim();
 }
 
 async function userById(userId: string): Promise<AuthUser | null> {
-  const row = await one(db.select().from(user).where(eq(user.id, userId)));
-  return row ? { id: row.id, email: row.email, name: row.name } : null;
+  const row = await one(
+    db
+      .select({ id: user.id, email: user.email, name: user.name, role: user.role })
+      .from(user)
+      .where(eq(user.id, userId)),
+  );
+  return row ? { ...row, role: row.role ?? "user" } : null;
 }
 
 function unauthorized(c: Parameters<MiddlewareHandler<ApiEnv>>[0], message: string) {
@@ -32,6 +38,9 @@ function unauthorized(c: Parameters<MiddlewareHandler<ApiEnv>>[0], message: stri
  * - a Better Auth API key, which resolves to its owning user;
  * - a Better Auth session cookie, which is what the console uses after sign-in.
  *
+ * A user whose role is `admin` is promoted to an admin scope, and a key takes
+ * the role of the person who owns it (docs/decision/0036).
+ *
  * The resolved scope rides on AsyncLocalStorage for the rest of the request, so
  * every read that could return another user's row is filtered in one place
  * (docs/decision/0028).
@@ -47,14 +56,17 @@ export const apiAuth: MiddlewareHandler<ApiEnv> = async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
 
   if (session?.user) {
+    const admin = isAdminRole(session.user.role);
     c.set("principal", {
       kind: "user",
       via: "session",
       userId: session.user.id,
       email: session.user.email,
       name: session.user.name,
+      role: session.user.role ?? "user",
+      admin,
     });
-    return runInScope(userScope(session.user.id), next);
+    return runInScope(userScope(session.user.id, admin), next);
   }
 
   const token = bearerOf(c.req.header("authorization"));
@@ -76,14 +88,17 @@ export const apiAuth: MiddlewareHandler<ApiEnv> = async (c, next) => {
 
     if (!owner) return unauthorized(c, "Invalid API key.");
 
+    const admin = isAdminRole(owner.role);
     c.set("principal", {
       kind: "user",
       via: "key",
       userId: owner.id,
       email: owner.email,
       name: owner.name,
+      role: owner.role,
+      admin,
     });
-    return runInScope(userScope(owner.id), next);
+    return runInScope(userScope(owner.id, admin), next);
   }
 
   return unauthorized(c, "Missing bearer token. Sign in, or send `Authorization: Bearer <key>`.");

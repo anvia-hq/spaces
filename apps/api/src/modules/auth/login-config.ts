@@ -1,4 +1,5 @@
 import { config } from "../../config.ts";
+import type { LoginConfig } from "./types.ts";
 
 /**
  * Which alternative sign-in providers this deployment has credentials for.
@@ -7,6 +8,6 @@ import { config } from "../../config.ts";
  * same `config.auth.github`, so the console cannot offer a button for a
  * provider the server would answer `404` on (docs/decision/0036).
  */
-export function loginConfig() {
+export function loginConfig(): LoginConfig {
   return { github: config.auth.github.enabled };
 }

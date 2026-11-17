@@ -3,6 +3,8 @@ import { config } from "./config.ts";
 import { store } from "./db.ts";
 import { driver } from "./modules/driver/service.ts";
 import { stopSandbox } from "./modules/sandboxes/service.ts";
+import { promoteListedAtBoot, promotionEntry } from "./modules/auth/admins.ts";
+import * as audit from "./modules/audit/service.ts";
 
 /**
  * Auto-stop: boat archives a sandbox when its TTL lapses. Every sweep stops the
@@ -33,6 +35,23 @@ async function reap() {
 }
 
 setInterval(() => void reap(), config.reaperIntervalMs);
+
+/**
+ * `SPACES_ADMIN_EMAILS` also covers accounts that already exist, so a deployment
+ * with one user on it needs no SQL step to get its first admin (decision 0036).
+ */
+const promoted = await promoteListedAtBoot().catch((error: unknown) => {
+  console.warn("[api] admin bootstrap failed:", error instanceof Error ? error.message : error);
+  return [] as string[];
+});
+
+for (const userId of promoted) {
+  await audit.record(promotionEntry(userId, null, "boot")).catch(() => undefined);
+}
+
+if (promoted.length > 0) {
+  console.log(`[api] promoted ${promoted.length} account(s) from SPACES_ADMIN_EMAILS`);
+}
 
 /** Traces fill the table faster than anything else; sweep them on a slow timer. */
 async function sweep() {

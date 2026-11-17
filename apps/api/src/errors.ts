@@ -86,7 +86,7 @@ const SERVICE_CODES = {
   file_too_large: "file_too_large",
   destination_exists: "destination_exists",
   provider_not_configured: "provider_not_configured",
-  forbidden: "machine_class_plan_required",
+  forbidden: "forbidden",
   internal: "internal",
 } as const satisfies Record<ServiceError["code"], ErrorCode>;
 

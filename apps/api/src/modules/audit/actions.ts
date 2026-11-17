@@ -136,6 +136,13 @@ const ROUTES: Record<string, RouteAction> = {
     targetType: "machine_size",
     targetParam: "name",
   },
+  "POST /users/:userId/role": {
+    action: "user.role_set",
+    targetType: "user",
+    targetParam: "userId",
+  },
+  "POST /users/:userId/ban": { action: "user.ban", targetType: "user", targetParam: "userId" },
+  "DELETE /users/:userId/ban": { action: "user.unban", targetType: "user", targetParam: "userId" },
   "POST /api-keys": { action: "api_key.create", targetType: "api_key" },
   "DELETE /api-keys/:keyId": {
     action: "api_key.revoke",
