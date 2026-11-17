@@ -42,6 +42,7 @@ out. Numbers quoted are measured, not estimated.
 | [0032](./0032-tracing.md)                                  | Tracing that ships with the server, not with a vendor                  | accepted                           |
 | [0033](./0033-login-first-console.md)                      | Login-first console: gate at the root, one sidebar                     | accepted                           |
 | [0034](./0034-operator-defined-machine-sizes.md)           | Machine sizes are operator-owned data                                  | accepted                           |
+| [0035](./0035-starter-guest-image.md)                      | A starter guest image with the toolchain baked in                      | accepted, narrows 0016             |
 
 ## Reading order
 
@@ -52,7 +53,7 @@ Changing a specific area? Jump straight to the relevant record:
 
 | Working on                           | Read                         |
 | ------------------------------------ | ---------------------------- |
-| Runtime, images, boot                | 0001, 0013, 0016             |
+| Runtime, images, boot                | 0001, 0013, 0016, 0035       |
 | API surface, status codes, errors    | 0002, 0003, 0005, 0021       |
 | Files, transfers, path handling      | 0008, 0009, 0010             |
 | Commands, processes, streaming       | 0012                         |
@@ -78,4 +79,5 @@ work see [docs/internals.md](../internals.md).
 No decision here has been superseded except 0001, which replaced the original Firecracker driver (that
 record explains why the codebase carries no Firecracker code despite having started there), and the parts
 of 0023 that 0026 rewrites: the primitive kit, the token names, and inline confirmation for destructive
-actions that destroy a disk.
+actions that destroy a disk. 0035 narrows 0016 rather than replacing it: a bootstrap snippet is still the
+per-deployment hook, and the starter image is now the other supported answer for a toolchain.

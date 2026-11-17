@@ -1,0 +1,213 @@
+# A starter guest image: the ready base, plus the agent/web toolchain on first boot.
+#
+# deploy/guest/Dockerfile is the base — Ubuntu 24.04, curl/git/procps/sudo, the
+# uid-1000 `user`. This file adds what a session actually reaches for, for that
+# user, and makes each one reachable from the non-interactive shell the API runs:
+#
+#   Node.js 26 (nvm, default alias) + npm     /home/user/.nvm
+#   bun                                       /home/user/.bun       (BUN_INSTALL)
+#   uv + uvx                                  /home/user/.local/bin
+#   GitHub CLI (gh)                           /usr/local/bin/gh     (no token)
+#   Playwright + Chromium                     playwright global npm, browsers in
+#                                             /opt/ms-playwright
+#   build-essential, python3 + venv           every native addon and uv venv
+#
+# Why a second Dockerfile rather than a stage in the base: the base is what
+# machines without the toolchain want and is the documented "ready image", and a
+# layer that costs ~0.9 GB must not be something `docker build -f
+# deploy/guest/Dockerfile` hands you by accident. `FROM spaces/guest:ubuntu` also
+# means the base is built once instead of being duplicated as a copy.
+#
+#   docker build -t spaces/guest:ubuntu  -f deploy/guest/Dockerfile .
+#   docker build -t spaces/guest:starter -f deploy/guest/Dockerfile.starter .
+#   docker save spaces/guest:starter | msb load -t spaces/guest:starter
+#   SPACES_MSB_IMAGE=spaces/guest:starter ./scripts/deploy.sh <host>
+#
+# See docs/decision/0034-starter-guest-image.md for the reasoning, the measured
+# size and build cost, and what is deliberately not baked in.
+ARG BASE_IMAGE=spaces/guest:ubuntu
+FROM ${BASE_IMAGE}
+
+# Node and nvm are pinned by version; nvm's installer is pinned by checksum as
+# well, because it is fetched over the network and then executed.
+ARG NODE_VERSION=26.13.1
+ARG NVM_VERSION=v0.41.0
+ARG NVM_SHA256SUM=045932fe05f0d4247c946f2ec0ec4026dbfd8ce88a5f67ea28d8ea833227f48b
+# gh is pinned by version; its tarball is checked against cli/cli's own
+# checksums file at download time, so the architecture is covered too.
+ARG GH_VERSION=2.104.0
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Layer order is a build-cache decision: OS packages first (they move when the
+# base moves), then gh (a single binary), then the runtimes (network downloads,
+# pinned), then the Playwright browsers last (the line that changes most often,
+# ~440 MB).
+#
+#   build-essential, python3, python3-venv, python3-dev  native addons and every
+#       venv uv creates that needs a C compiler (node-gyp, lxml, …)
+#   libnss3 libnspr4 libatk* libcups2 libdrm2 libgbm1 libxkbcommon0
+#   libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libpango* libcairo2
+#   libasound2t64 libatspi2.0-0 libglib2.0-0 libexpat1  Chromium's shared
+#       libraries, written out so a headless launch works without npx at runtime
+#   fonts-liberation fonts-noto-color-emoji  text and emoji actually render
+#   unzip  the nvm installer and Playwright's browser zips need it
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential \
+      python3 python3-venv python3-dev \
+      libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
+      libcups2t64 libdrm2 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 \
+      libxfixes3 libxrandr2 libpango-1.0-0 libcairo2 libasound2t64 \
+      libglib2.0-0t64 libexpat1 \
+      fonts-liberation fonts-noto-color-emoji \
+      unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+# gh, from the release tarball checked against cli/cli's checksums, rather than
+# GitHub's apt repository: no extra keyring or source list in the image, and no
+# apt state to keep in step. It is a tool, not a credential — `gh auth login`,
+# GH_TOKEN or GITHUB_TOKEN inside the sandbox is how a session authenticates,
+# and nothing here reads one.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    base="https://github.com/cli/cli/releases/download/v${GH_VERSION}"; \
+    curl -fsSL -o "/tmp/gh_${GH_VERSION}_linux_${arch}.tar.gz" \
+      "${base}/gh_${GH_VERSION}_linux_${arch}.tar.gz"; \
+    curl -fsSL -o /tmp/gh_checksums.txt "${base}/gh_${GH_VERSION}_checksums.txt"; \
+    (cd /tmp && grep " gh_${GH_VERSION}_linux_${arch}.tar.gz$" gh_checksums.txt | sha256sum -c -); \
+    tar -xzf "/tmp/gh_${GH_VERSION}_linux_${arch}.tar.gz" -C /tmp \
+      "gh_${GH_VERSION}_linux_${arch}/bin/gh"; \
+    install -m 0755 "/tmp/gh_${GH_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh; \
+    rm -rf "/tmp/gh_${GH_VERSION}_linux_${arch}.tar.gz" /tmp/gh_checksums.txt \
+      "/tmp/gh_${GH_VERSION}_linux_${arch}"; \
+    gh --version
+
+USER user
+# HOME is set explicitly, not inherited: every installer below writes under it.
+ENV HOME=/home/user
+# A fixed work directory, so `curl -O` and `npm install` land here and not in
+# whatever directory the build context happened to be. `.nvm/current` is a
+# relative link, and nvm resolves it against the caller's cwd.
+WORKDIR /home/user
+
+ENV BUN_INSTALL=/home/user/.bun
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
+# The toolchain directories, as the image ENV. `.local/bin` is where uv and uvx
+# land, `.bun/bin` is bun, `.nvm/current/bin` is the default Node plus the global
+# npm binaries — a link, so `nvm use 22` moves the whole entry instead of leaving
+# a stale version in front of the new one. The tail is the base image's own PATH.
+#
+# microsandbox does not forward this ENV into `msb exec` (measured: the guest
+# agent runs commands with no PATH of its own), and the API's privilege wrapper
+# is `su user -c`, which makes `su` a login shell that rebuilds PATH from
+# /etc/environment and runs /etc/profile.d. That is why the same directories are
+# written three times below — image ENV, /etc/environment, profile snippet — and
+# why the build asserts them through a `su user -c` at the end. One copy would be
+# the bug this image exists to avoid.
+ENV PATH=/home/user/.local/bin:/home/user/.bun/bin:/home/user/.nvm/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+
+# Node via nvm, not apt and not a tarball: nvm is what an agent reaches for to
+# switch versions, and shipping ~/.nvm means `nvm install` and `nvm use` work on
+# day one instead of being a second download. `nvm alias default` is what a bare
+# `nvm use` and every new shell resolve to. nvm 0.41 installs from a clone, so
+# the installer is fetched and verified before it runs and the checkout keeps its
+# git-dir — that is what makes `nvm install` of another version cheap later.
+RUN curl -fsSLO "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" \
+ && echo "${NVM_SHA256SUM}  install.sh" | sha256sum -c - \
+ && bash install.sh --no-use --default=0 \
+ && rm -f install.sh \
+ && export NVM_SYMLINK_CURRENT=true \
+ && . "$HOME/.nvm/nvm.sh" \
+ && nvm install "${NODE_VERSION}" \
+ && nvm alias default "${NODE_VERSION}" \
+ && nvm use default \
+ && node -v \
+ && npm -v \
+ && test -L /home/user/.nvm/current \
+ && test -x "$(readlink -f /home/user/.nvm/current)/bin/npm"
+
+# nvm, and the link that makes the version switchable, for shells that do not
+# inherit the ENV above. `NVM_SYMLINK_CURRENT` is opt-in in nvm 0.41: without it
+# `nvm use` moves only that shell's PATH and `.nvm/current` is never created.
+# The snippet goes to /etc/profile.d, which Ubuntu's /etc/profile loops over for
+# every `su -c` login shell; ~/.bashrc gets it too, for a non-login interactive
+# bash, and ~/.bash_profile is a copy of ~/.bashrc so a login bash reads it.
+#
+# /etc/environment is what a login shell applies before any script runs, so it
+# carries PATH — the same value as the ENV above, in the same order.
+RUN printf '%s\n' \
+      'export NVM_DIR="$HOME/.nvm"' \
+      'export NVM_SYMLINK_CURRENT=true' \
+      'if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; fi' \
+      'case ":$PATH:" in *":$HOME/.nvm/current/bin:"*) ;; *) export PATH="$HOME/.nvm/current/bin:$PATH" ;; esac' \
+      > /home/user/.nvm-profile.sh \
+ && sudo mv /home/user/.nvm-profile.sh /etc/profile.d/nvm.sh \
+ && sudo chmod 0644 /etc/profile.d/nvm.sh \
+ && for f in /home/user/.profile /home/user/.bashrc; do \
+      printf '%s\n' '[ -r /etc/profile.d/nvm.sh ] && . /etc/profile.d/nvm.sh' >> "$f"; \
+    done \
+ && cp /home/user/.bashrc /home/user/.bash_profile \
+ && printf '%s\n' \
+      'PATH="/home/user/.nvm/current/bin:/home/user/.local/bin:/home/user/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin"' \
+      | sudo tee /etc/environment >/dev/null \
+ && sh -c 'command -v node' \
+ && dash -lc 'command -v node' \
+ && bash -lc 'command -v node'
+
+# bun: the official installer drops the binary in $BUN_INSTALL/bin.
+RUN curl -fsSL https://bun.sh/install | bash \
+ && bun -v
+
+# uv and uvx: the Astral installer, to a file first rather than `| sh` so a
+# failed download cannot half-run. Installs into $HOME/.local/bin and starts
+# every uv invocation from a shell, so $HOME needs no quoting games.
+RUN curl -fsSL https://astral.sh/uv/install.sh -o /tmp/uv-install.sh \
+ && sh /tmp/uv-install.sh \
+ && rm -f /tmp/uv-install.sh \
+ && uv --version \
+ && uvx --version
+
+# Playwright + Chromium. Installed globally so `playwright` is a command the
+# toolchain shares, and its browsers go under PLAYWRIGHT_BROWSERS_PATH rather
+# than $HOME/.cache, so root and `user` read one copy and a `/home/user`
+# snapshot does not carry 440 MB of browser twice.
+#
+# `npm -g` as `user` puts node_modules under ~/.nvm/versions and the symlink in
+# ~/.nvm/current/bin — both the user's, both on PATH. The browser directory is
+# created and chowned here because it is shared. `--with-deps` is deliberate
+# next to the hand-written apt list: it closes whatever Ubuntu 24.04 renamed
+# (the t64 transition) without trusting the list to be complete.
+RUN sudo mkdir -p /opt/ms-playwright \
+ && sudo chown -R 1000:1000 /opt/ms-playwright \
+ && npm install -g playwright@1.65.1 \
+ && playwright install --with-deps chromium \
+ && playwright --version \
+ && npm ls -g --depth=0
+
+# Back to root as the image's default user: `msb exec` starts as root and that is
+# deliberate (see the base Dockerfile). Commands still run as `user` through the
+# The image gate. Two checks that are easy to get wrong silently:
+#
+# 1. The account has a password hash. `su` refuses a login shell for an account
+#    without one (it prompts for a password that does not exist), so a login
+#    shell would quietly do nothing for the API's privilege drop.
+# 2. Chromium's shared libraries are all present, per Playwright's own
+#    apt simulation (`install-deps --dry-run` prints "All system dependencies
+#    are installed." and exits non-zero otherwise). A headless launch is the real
+#    proof and lives in the PR / the docs recipe, not in a build that would then
+#    need a display-less browser on every rebuild.
+#
+# The login shell here is root's `sh -lc`, and it is the check that catches a
+# snippet that never reaches /etc/profile.d — not a substitute for a launch.
+RUN sudo chmod 0555 / \
+ && sudo grep '^user:' /etc/shadow \
+ && sudo chmod 0755 / \
+ && sh -lc 'command -v node bun uv uvx gh playwright' \
+ && sh -lc 'node -v && bun -v && uv --version && gh --version' \
+ && playwright install-deps --dry-run chromium
+
+USER root
+WORKDIR /home/user
+CMD ["sleep", "infinity"]
