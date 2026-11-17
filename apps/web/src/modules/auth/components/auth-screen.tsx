@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { signIn, signUp } from "@/lib/auth-client.ts";
+import { useLoginProviders } from "../hooks/use-login-providers.ts";
 import type { AuthMode } from "../types.ts";
+import { GithubSignInButton } from "./github-sign-in-button.tsx";
 
 /**
  * The only thing a signed-out visitor sees.
@@ -23,6 +25,7 @@ export function AuthScreen() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const providers = useLoginProviders();
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -66,6 +69,17 @@ export function AuthScreen() {
             mode you are in is carried by the submit button and the link under
             it, so a title would only repeat what the button already says. */}
         <div className="flex flex-col">
+          {providers?.github && (
+            <div className="mb-5 flex flex-col gap-4">
+              <GithubSignInButton onError={setError} />
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span aria-hidden className="h-px flex-1 bg-border" />
+                or
+                <span aria-hidden className="h-px flex-1 bg-border" />
+              </div>
+            </div>
+          )}
+
           <form className="flex flex-col gap-3.5" onSubmit={submit}>
             {signingUp && (
               <div className="flex flex-col gap-1.5">

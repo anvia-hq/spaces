@@ -54,7 +54,9 @@ bun run dev                # API on :8787, console on :5173
 ```
 
 Open **http://localhost:5173** and create an account — the console is login-first and sign-up is enabled
-by default. For API clients, `sk_local_dev` is the operator key a fresh install accepts:
+by default. GitHub sign-in is one environment pair away (`SPACES_GITHUB_CLIENT_ID`,
+`SPACES_GITHUB_CLIENT_SECRET`; see [DEVELOPMENT.md](DEVELOPMENT.md#github-sign-in)). For API clients,
+`sk_local_dev` is the operator key a fresh install accepts:
 
 ```bash
 curl -s -X POST localhost:8787/api/v1/sandboxes \
@@ -71,7 +73,8 @@ sandbox, set `SPACES_BOOTSTRAP` — see [docs/configuration.md](docs/configurati
 The console covers everything the API does — terminal, files, ports, SSH, snapshots, usage — plus the
 lifecycle timeline for each sandbox. Sandboxes belong to whoever made them, every change lands in an
 append-only audit log, and every request and its database and driver work are traced into the server's
-own database.
+own database. People sign in by email and password; GitHub is an optional second door, configured from
+the environment and absent unless it is.
 
 The HTTP surface is spaces' own: `/api/v1`, bearer auth or the console's session cookie, one error
 envelope, schemas defined once in `packages/shared`.

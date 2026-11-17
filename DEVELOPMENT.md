@@ -17,7 +17,7 @@ docs/
   api.md              Endpoint reference
   configuration.md    Environment, networking and guest-image settings
   internals.md        How files, ports, SSH and commands actually work
-  decision/           Why the architecture is what it is (33 decision records)
+  decision/           Why the architecture is what it is (35 decision records)
 deploy/
   spaces.service      systemd unit (KillMode=process keeps sandboxes alive on restart)
   spaces.env.example  Runtime configuration installed to /etc/spaces/spaces.env
@@ -176,6 +176,38 @@ from `/etc/environment` and `/etc/profile.d`. The image sets PATH in all three p
 
 Why the image is shaped this way, and what was deliberately left out, is
 [decision 0035](docs/decision/0035-starter-guest-image.md).
+
+## GitHub sign-in
+
+The console also signs people in with GitHub, when the deployment supplies an OAuth app. It is opt-in
+and purely additive: with nothing set, the server registers no provider, the console draws no button,
+and email + password is the only way in (decision 0036).
+
+1. Create an OAuth app — GitHub → Settings → Developer settings → **OAuth Apps** → _New OAuth App_. A
+   GitHub _App_ works too; register the same callback as its authorization callback URL.
+2. **Authorization callback URL:** the API's own origin plus `/api/auth/callback/github`.
+
+   | Where you are running | Callback URL to register                                           |
+   | --------------------- | ------------------------------------------------------------------ |
+   | `bun run dev`         | `http://localhost:8787/api/auth/callback/github`                   |
+   | A deployment          | `https://<your-host>/api/auth/callback/github` (`SPACES_AUTH_URL`) |
+
+   The callback always lands on the API, even when the sign-in starts on the Vite console at `:5173`:
+   the dev proxy starts it, and GitHub returns to `SPACES_AUTH_URL`, which defaults to `:8787`.
+
+3. Put the pair in the environment, or in `.env` for `bun run dev` (gitignored):
+
+   ```bash
+   SPACES_GITHUB_CLIENT_ID=Ov23li…
+   SPACES_GITHUB_CLIENT_SECRET=…
+   ```
+
+4. Restart the API. `GET /api/v1/me` reports `"login": { "github": true }`, and the auth screen shows
+   "Continue with GitHub".
+
+A GitHub identity is the same kind of user as an email account: same `user` row, same ownership of
+sandboxes, same audit entries. An existing password account is **not** linked by matching email — sign
+in with the password and GitHub stays a separate account.
 
 ## Configuration
 

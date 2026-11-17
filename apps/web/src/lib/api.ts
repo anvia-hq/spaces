@@ -489,8 +489,12 @@ export const api = {
 
   /* ------------------------------------------------------------- identity */
 
-  /** Who this browser is: the operator key, a user session, or a user key. */
-  me: () => request<{ principal: MePrincipal; operator: boolean }>("/me"),
+  /**
+   * Who this browser is: the operator key, a user session, or a user key. The
+   * same answer carries which alternative sign-in providers the server has
+   * credentials for, so the auth screen never offers a button it cannot honour.
+   */
+  me: () => request<{ principal: MePrincipal; operator: boolean; login: LoginProviders }>("/me"),
 
   /* ------------------------------------------------------------- api keys */
 
@@ -739,6 +743,9 @@ export interface AuditEntry {
   durationMs: number | null;
   metadata: Record<string, unknown>;
 }
+
+/** Non-password sign-in the server can complete (docs/decision/0036). */
+export type LoginProviders = { github: boolean };
 
 export type MePrincipal =
   | { kind: "operator"; via: "operator" }

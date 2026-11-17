@@ -3,6 +3,9 @@ const port = Number(process.env.PORT ?? 8787);
 const authUrl =
   process.env.SPACES_AUTH_URL ?? process.env.SPACES_PUBLIC_URL ?? `http://localhost:${port}`;
 
+const githubClientId = process.env.SPACES_GITHUB_CLIENT_ID?.trim() ?? "";
+const githubClientSecret = process.env.SPACES_GITHUB_CLIENT_SECRET?.trim() ?? "";
+
 const extraOrigins = (
   process.env.SPACES_AUTH_TRUSTED_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173"
 )
@@ -131,6 +134,16 @@ export const config = {
     sessionDays: Number(process.env.SPACES_AUTH_SESSION_DAYS ?? 30),
     /** Prefix on generated API keys, so they are recognisable in logs and files. */
     keyPrefix: process.env.SPACES_API_KEY_PREFIX ?? "spk_",
+    /**
+     * GitHub OAuth. Registered only when both halves are set: half a pair
+     * cannot complete a sign-in, and the console hides the button on the same
+     * signal (docs/decision/0036).
+     */
+    github: {
+      enabled: githubClientId !== "" && githubClientSecret !== "",
+      clientId: githubClientId,
+      clientSecret: githubClientSecret,
+    },
   },
   /**
    * HMAC key for signed transfer URLs. Derived from the API key when unset, so
