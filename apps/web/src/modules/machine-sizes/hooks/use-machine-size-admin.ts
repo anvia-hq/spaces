@@ -4,6 +4,13 @@ import type { MachineSize } from "@spaces/shared/sandbox";
 import { ApiError, api } from "@/lib/api.ts";
 import { usePoll } from "@/lib/use-poll.ts";
 
+export type MachineSizePatch = {
+  vcpu: number;
+  memMib: number;
+  diskGb: number;
+  description: string | null;
+};
+
 export type NewMachineSize = {
   name: string;
   vcpu: number;
@@ -46,6 +53,17 @@ export function useMachineSizeAdmin(includeRetired = false) {
       toast.success(`Preset ${size.name} added`);
     });
 
+  const update = (size: MachineSize, patch: MachineSizePatch) =>
+    act(`update-${size.name}`, async () => {
+      await api.updateMachineSize(size.name, {
+        vcpu: patch.vcpu,
+        memMib: patch.memMib,
+        diskGb: patch.diskGb,
+        description: patch.description,
+      });
+      toast.success(`Preset ${size.name} updated`);
+    });
+
   const retire = (size: MachineSize) =>
     act(`retire-${size.name}`, async () => {
       const answer = await api.retireMachineSize(size.name);
@@ -63,6 +81,7 @@ export function useMachineSizeAdmin(includeRetired = false) {
     active: sizes.filter((size) => size.retiredAt === null),
     busy,
     create,
+    update,
     retire,
   };
 }

@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Trash2 } from "lucide-react";
 import type { MachineSizes } from "../hooks/use-machine-size-admin.ts";
+import { EditMachineSizeDialog } from "./edit-machine-size-dialog.tsx";
 
 export function MachineSizeRow({ size, sizes }: { size: MachineSize; sizes: MachineSizes }) {
   const isDefault = size.name === DEFAULT_MACHINE_SIZE;
   const retired = size.retiredAt !== null;
   const busy = sizes.busy === `retire-${size.name}`;
+  const editing = sizes.busy === `update-${size.name}`;
 
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
@@ -23,6 +25,11 @@ export function MachineSizeRow({ size, sizes }: { size: MachineSize; sizes: Mach
 
       {!retired && (
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <EditMachineSizeDialog
+            size={size}
+            busy={editing}
+            onSave={(patch) => sizes.update(size, patch)}
+          />
           {isDefault ? (
             <Button size="sm" variant="ghost" disabled>
               Cannot retire

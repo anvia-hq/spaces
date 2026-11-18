@@ -192,6 +192,11 @@ runtime's `publicHost`; SSH itself is not relayed (decision 0042).
 | `PATCH`  | `/machine-sizes/{name}` | Operator only; any of `vcpu`, `memMib`, `diskGb`, `description`    |
 | `DELETE` | `/machine-sizes/{name}` | Operator only; retires, does not delete (see below)                |
 
+`default` can be edited like any other preset — it is what a create falls back to, not a fixed
+shape — but it cannot be retired, because every deployment needs a size to fall back to. An edit takes
+effect on the next create, and on the next resume of a sandbox carrying that preset's name; a disk keeps
+the size it was created with, so a larger `diskGb` only reaches new sandboxes.
+
 Any authenticated caller may read the list — the console needs it to render the create dialog.
 Changing it takes the operator key (`SPACES_API_KEY`) **or a signed-in account with the `admin` role**,
 sent as its session cookie or as one of its own API keys; anything else answers `403 forbidden` with
