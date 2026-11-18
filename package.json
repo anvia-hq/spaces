@@ -23,6 +23,7 @@
     "test:rules": "bun test tooling",
     "test:scripts": "bun test scripts apps/cli",
     "test:guest": "bun run --cwd apps/api test:guest",
+    "prove:cluster": "bun run scripts/prove-cluster.ts",
     "db:migrate-from-sqlite": "bun run scripts/migrate-sqlite-to-postgres.ts"
   },
   "devDependencies": {
