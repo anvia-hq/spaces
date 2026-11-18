@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-barrel-file";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports a file of only re-exports", () => {
     expect(lint(rule, 'export * from "./a";\nexport { b } from "./b";\n', "index.ts")).toHaveLength(
       1,

@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-module-mocking";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports mock.module, jest and vi module mocks", () => {
     expect(lint(rule, 'mock.module("./a", () => ({}));')).toHaveLength(1);
     expect(lint(rule, 'jest.mock("./a");')).toHaveLength(1);

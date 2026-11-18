@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-reflect-apply";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports Reflect.apply", () => {
     expect(lint(rule, "const a = Reflect.apply(f, this, args);")).toHaveLength(1);
   });

@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-native-primitives";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports a native button", () => {
     const messages = lint(rule, "const a = <button>hi</button>;", "fixture.tsx");
 

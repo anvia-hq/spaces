@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-conditional-spread";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports a spread of an && expression", () => {
     expect(lint(rule, "const a = { ...(c && { d: 1 }) };")).toHaveLength(1);
   });

@@ -41,7 +41,7 @@ bun run dev:api     # API with watch
 bun run dev:web     # console with HMR
 bun run typecheck   # all workspaces
 bun run build       # production build of the console
-bun run lint        # oxlint (aven's rules)
+bun run lint        # oxlint (this repo's rules)
 bun run lint:fix    # autofix
 bun run format      # oxfmt
 bun run format:check

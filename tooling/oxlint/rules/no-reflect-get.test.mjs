@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-reflect-get";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports Reflect.get", () => {
     expect(lint(rule, "const a = Reflect.get(target, key, receiver);")).toHaveLength(1);
   });

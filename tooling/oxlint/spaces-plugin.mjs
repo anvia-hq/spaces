@@ -14,7 +14,7 @@ import noNativePrimitives from "./rules/no-native-primitives.mjs";
 import paddedIf from "./rules/padded-if.mjs";
 
 export default {
-  meta: { name: "aven" },
+  meta: { name: "spaces" },
   rules: {
     "no-comments": noComments,
     "no-conditional-spread": noConditionalSpread,

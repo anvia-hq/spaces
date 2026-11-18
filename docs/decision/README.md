@@ -36,7 +36,7 @@ out. Numbers quoted are measured, not estimated.
 | [0026](./0026-console-on-shadcn-and-reui.md)                       | Console on shadcn/ui primitives and the free ReUI set                  | accepted, supersedes parts of 0023   |
 | [0027](./0027-module-layout.md)                                    | Feature code in modules, on both sides                                 | accepted                             |
 | [0028](./0028-accounts-and-api-keys.md)                            | Accounts, API keys, and one owner per resource                         | accepted                             |
-| [0029](./0029-oxlint-and-oxfmt.md)                                 | One lint and format gate: oxlint and oxfmt, on Aven's rules            | accepted                             |
+| [0029](./0029-oxlint-and-oxfmt.md)                                 | One lint and format gate: oxlint and oxfmt, on one written rule set    | accepted                             |
 | [0030](./0030-postgres.md)                                         | Postgres, and how the old SQLite data gets there                       | accepted                             |
 | [0031](./0031-audit-log.md)                                        | An audit log that cannot be forgotten, and cannot be edited            | accepted                             |
 | [0032](./0032-tracing.md)                                          | Tracing that ships with the server, not with a vendor                  | accepted                             |

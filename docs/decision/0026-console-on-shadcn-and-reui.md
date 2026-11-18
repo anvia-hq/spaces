@@ -63,7 +63,7 @@ declare a bogus npm dependency named `cn` (the CLI installs the real `cn` packag
   bump. That is the price of being able to fix a component's padding without forking a library.
 - The `cn` rewrite and the narrowing fix are a per-install chore until ReUI corrects the manifest.
 - The free tier means the layouts we would have copied from premium blocks are ours to maintain.
-- Our own `.ts`/`.tsx` stay comment-free (0149 is an `aven` rule, adopted here); vendored registry files
+- Our own `.ts`/`.tsx` stay comment-free (0149 is a rule in `tooling/oxlint`, adopted here); vendored registry files
   keep the comments they shipped with, and are treated as third-party source.
 
 ## Alternatives ruled out

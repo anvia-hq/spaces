@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-reduce-accumulator-copy";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports Object.assign({}, acc, ...) returned from reduce", () => {
     expect(
       lint(rule, "const a = xs.reduce((acc, x) => Object.assign({}, acc, { [x]: 1 }), {});"),
