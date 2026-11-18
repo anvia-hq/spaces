@@ -28,6 +28,8 @@ import {
   type MachineSizeRow,
   runtimes,
   type RuntimeRow,
+  type RuntimeSampleRow,
+  runtimeSamples,
   notInArray,
   type SandboxPortRow,
   type SandboxRow,
@@ -46,7 +48,7 @@ import { config } from "./config.ts";
 import { canSee, currentOwnerId, scopedOwner } from "./scope.ts";
 import { tracedStore } from "./modules/traces/proxies.ts";
 
-export type { SavedSnapshotRow, SnapshotShareRow } from "@spaces/db";
+export type { RuntimeSampleRow, SavedSnapshotRow, SnapshotShareRow } from "@spaces/db";
 
 const handle = createDb(config.databaseUrl);
 export const db = handle.db;
@@ -643,6 +645,29 @@ const rawStore = {
       .update(runtimes)
       .set({ state: "offline", updatedAt: at(now())! })
       .where(where);
+  },
+
+  async insertRuntimeSamples(rows: RuntimeSampleRow[]): Promise<void> {
+    if (rows.length === 0) return;
+
+    await db.insert(runtimeSamples).values(rows).onConflictDoNothing();
+  },
+
+  async runtimeSamplesSince(since: Date, runtimeId?: string): Promise<RuntimeSampleRow[]> {
+    const where = runtimeId
+      ? and(gte(runtimeSamples.at, since), eq(runtimeSamples.runtimeId, runtimeId))
+      : gte(runtimeSamples.at, since);
+
+    return db.select().from(runtimeSamples).where(where).orderBy(asc(runtimeSamples.at));
+  },
+
+  async sweepRuntimeSamples(olderThan: Date): Promise<number> {
+    const rows = await db
+      .delete(runtimeSamples)
+      .where(lt(runtimeSamples.at, olderThan))
+      .returning({ runtimeId: runtimeSamples.runtimeId });
+
+    return rows.length;
   },
 
   async runtimeLoad(): Promise<Map<string, RuntimeLoad>> {

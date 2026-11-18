@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** The build a runtime agent reports in `hello`; the console flags machines that disagree. */
+export const AGENT_VERSION = "0.1.0";
+
 export const PROTOCOL_VERSION = 1;
 
 export const RUNTIME_NAME = /^[a-z][a-z0-9-]{0,31}$/;
@@ -43,16 +46,30 @@ export const RuntimeSchema = z.object({
   snapshots: z.number().int(),
   resources: Resources.nullable(),
   committed: z.object({ vcpu: z.number().int(), memMib: z.number().int() }),
+  /** What the scheduler multiplies reported resources by before deciding there is no room. */
+  overcommit: z.number(),
   driver: z.string().nullable(),
   capabilities: DriverCapabilities.nullable(),
   publicHost: z.string().nullable(),
   agentVersion: z.string().nullable(),
+  protocol: z.number().int().nullable(),
   tokenPrefix: z.string().nullable(),
   connectedAt: z.string().datetime().nullable(),
   lastSeenAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
 });
 export type Runtime = z.infer<typeof RuntimeSchema>;
+
+export const RuntimeSampleSchema = z.object({
+  runtimeId: z.string(),
+  at: z.string().datetime(),
+  activeSandboxes: z.number().int(),
+  vcpuCommitted: z.number().int(),
+  memMibCommitted: z.number().int(),
+  vcpuCapacity: z.number().int().nullable(),
+  memMibCapacity: z.number().int().nullable(),
+});
+export type RuntimeSample = z.infer<typeof RuntimeSampleSchema>;
 
 const labels = z
   .record(z.string().max(256))

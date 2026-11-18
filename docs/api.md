@@ -96,6 +96,7 @@ embedded in the API process, and any number of agent runtimes can be registered 
 | -------- | --------------------------- | ------------------------------------------------------------------------------- |
 | `GET`    | `/runtimes`                 | Every runtime with its load; any authenticated caller                           |
 | `GET`    | `/runtimes/{runtime}`       | By id (`rt_…`, or `local`) or by name                                           |
+| `GET`    | `/runtimes/samples`         | Capacity history; `?minutes=` (5–10080, default 360), `?runtime=` to narrow     |
 | `POST`   | `/runtimes`                 | Admin only; `{ name, labels?, maxSandboxes? }`; answers `201` with `token` once |
 | `PATCH`  | `/runtimes/{runtime}`       | Admin only; any of `name`, `labels`, `maxSandboxes` (`null` clears), `draining` |
 | `POST`   | `/runtimes/{runtime}/token` | Admin only; new token, and the connected agent is cut off at once               |

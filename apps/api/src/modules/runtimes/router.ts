@@ -3,8 +3,9 @@ import type { Context } from "hono";
 import { CreateRuntimeRequest, UpdateRuntimeRequest } from "@spaces/shared/runtime";
 import { type ApiEnv, fail, validate } from "../../errors.ts";
 import { mayOperate } from "../auth/admins.ts";
-import { RuntimeParams } from "./schema.ts";
+import { RuntimeParams, RuntimeSamplesQuery } from "./schema.ts";
 import {
+  clusterSamples,
   createRuntime,
   deleteRuntime,
   getRuntime,
@@ -31,6 +32,15 @@ export const runtimesRouter = new Hono<ApiEnv>()
       runtimes: await listRuntimes(),
     }),
   )
+  .get("/runtimes/samples", validate("query", RuntimeSamplesQuery), async (c) => {
+    const query = c.req.valid("query");
+
+    return c.json({
+      ok: true as const,
+      type: "runtime.samples" as const,
+      samples: await clusterSamples(query.minutes ?? 360, query.runtime),
+    });
+  })
   .get("/runtimes/:runtime", validate("param", RuntimeParams), async (c) =>
     c.json({
       ok: true as const,

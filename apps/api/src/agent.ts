@@ -1,10 +1,9 @@
+import { AGENT_VERSION } from "@spaces/shared/runtime";
 import { config } from "./config.ts";
 import { buildDriver } from "./modules/driver/service.ts";
 import { detectResources } from "./modules/driver/resources.ts";
 import { isLocalHost } from "./modules/driver/ssh.ts";
 import { startAgent } from "./modules/runtime-agent/agent.ts";
-
-const AGENT_VERSION = "0.1.0";
 
 if (!config.runtime.controlUrl || !config.runtime.token) {
   console.error("[agent] set SPACES_CONTROL_URL and SPACES_RUNTIME_TOKEN");

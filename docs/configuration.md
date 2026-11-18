@@ -26,6 +26,8 @@ networking and deployment targets; the architecture behind them is in
 | `SPACES_DATABASE_URL`              | `postgres://localhost:5432/spaces`        | Postgres connection string                                              |
 | `SPACES_TRACES`                    | `on`                                      | `off` records no spans                                                  |
 | `SPACES_TRACE_RETENTION_DAYS`      | `7`                                       | Spans older than this are swept (`0` keeps them)                        |
+| `SPACES_SAMPLE_INTERVAL_MS`        | `30000`                                   | How often runtime capacity is sampled (`0` disables the Cluster charts) |
+| `SPACES_SAMPLE_RETENTION_DAYS`     | `7`                                       | Capacity samples older than this are swept (`0` keeps them)             |
 | `SPACES_OTLP_ENDPOINT`             | —                                         | Also export spans to an OTLP collector                                  |
 | `SPACES_AUTH_SECRET`               | dev value                                 | Better Auth signing secret; set it in any real deployment               |
 | `SPACES_AUTH_URL`                  | request origin                            | Public origin of the API, for cookies and the origin check              |
