@@ -71,7 +71,8 @@ sandbox, set `SPACES_BOOTSTRAP` — see [docs/configuration.md](docs/configurati
 ## Console, API, accounts
 
 The console covers everything the API does — terminal, files, ports, SSH, snapshots, usage — plus the
-lifecycle timeline for each sandbox. Sandboxes belong to whoever made them, every change lands in an
+lifecycle timeline for each sandbox. One deployment is one team, so everyone who signs in sees every
+sandbox; every change is attributed to whoever made it and lands in an
 append-only audit log, and every request and its database and driver work are traced into the server's
 own database. People sign in by email and password; GitHub is an optional second door, configured from
 the environment and absent unless it is.
