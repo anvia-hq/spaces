@@ -90,6 +90,8 @@ rsync -az --delete \
   --exclude 'apps/api/.data' \
   --exclude 'apps/web/dist' \
   --exclude '.env' \
+  --exclude '.pi' \
+  --exclude '.claude' \
   --exclude '*.db' --exclude '*.db-wal' --exclude '*.db-shm' \
   "$REPO_ROOT/" "$TARGET:$APP_DIR/"
 
