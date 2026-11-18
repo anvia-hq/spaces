@@ -9,6 +9,7 @@ import { CreateSandboxDialog } from "@/modules/sandboxes/components/create-sandb
 import { EmptyFleet } from "@/modules/sandboxes/components/empty-fleet.tsx";
 import { GridSkeleton } from "@/modules/sandboxes/components/grid-skeleton.tsx";
 import { SandboxGrid } from "@/modules/sandboxes/components/sandbox-grid.tsx";
+import { useRuntimeChoices } from "@/modules/runtimes/hooks/use-runtime-choices.ts";
 import { useMachineSizes } from "@/modules/sandboxes/hooks/use-machine-sizes.ts";
 import { useSandboxes } from "@/modules/sandboxes/hooks/use-sandboxes.ts";
 
@@ -19,6 +20,7 @@ export const Route = createFileRoute("/")({
 function SandboxesPage() {
   const { poll, rows, busy, act, create } = useSandboxes();
   const { sizes, byName } = useMachineSizes();
+  const { choices } = useRuntimeChoices();
   const [creating, setCreating] = useState(false);
 
   return (
@@ -49,6 +51,7 @@ function SandboxesPage() {
         open={creating}
         onOpenChange={setCreating}
         sizes={sizes}
+        runtimes={choices}
         busy={busy === "create"}
         onCreate={create}
       />

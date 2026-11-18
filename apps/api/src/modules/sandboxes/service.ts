@@ -6,12 +6,14 @@ import type {
   SandboxType,
 } from "@spaces/shared/sandbox";
 import { config } from "../../config.ts";
-import { iso, now, store } from "../../db.ts";
+import { iso, now, store, type RuntimeRow } from "../../db.ts";
 import { withSpan } from "../traces/tracer.ts";
 import { ServiceError } from "../../errors.ts";
-import { driver } from "../driver/service.ts";
-import type { DriverHandle, MachineSpec } from "../driver/types.ts";
+import { driverFor } from "../driver/service.ts";
+import type { DriverHandle, MachineSpec, SandboxDriver } from "../driver/types.ts";
 import { requireActiveMachineSize } from "../machine-sizes/service.ts";
+import { assertRoom, pickRuntime } from "../runtimes/service.ts";
+import type { SchedulingRequest } from "../runtimes/types.ts";
 import { resolveCreateSource } from "./create-source.ts";
 import { reservePrepublishPorts, republishPorts } from "./host-ports.ts";
 import type { CreateSource } from "./types.ts";
@@ -50,6 +52,13 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
   const size = await requireActiveMachineSize(input.type);
 
   const source = input.from ? await resolveCreateSource(input.from) : null;
+  const scheduling: SchedulingRequest = { size };
+
+  if (input.runtime) scheduling.pin = input.runtime;
+
+  if (source) scheduling.sourceRuntimeId = source.runtimeId;
+
+  const runtime = await pickRuntime(scheduling);
 
   const id = newSandboxId();
   const name = input.name ?? `Spaces ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
@@ -62,10 +71,11 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
     env: input.env,
     ttlSeconds: input.ttlSeconds,
     archiveAfter: ttlToArchiveAfter(input.ttlSeconds),
+    runtimeId: runtime.id,
   });
-  await store.event(id, "sandbox.created", { type: input.type });
+  await store.event(id, "sandbox.created", { type: input.type, runtime: runtime.name });
 
-  void provision(id, input.type, size, input.env, source, input.setupScript).catch(() => {
+  void provision(id, runtime, input.type, size, input.env, source, input.setupScript).catch(() => {
     /* recorded on the row by provision() */
   });
 
@@ -74,6 +84,7 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
 
 async function provision(
   id: string,
+  runtime: RuntimeRow,
   type: SandboxType,
   size: MachineSpec,
   env: Record<string, string>,
@@ -81,12 +92,13 @@ async function provision(
   setupScript?: string,
 ) {
   return withSpan("sandbox.provision", { "spaces.sandbox_id": id, "spaces.type": type }, () =>
-    provisionInner(id, type, size, env, source, setupScript),
+    provisionInner(id, runtime, type, size, env, source, setupScript),
   );
 }
 
 async function provisionInner(
   id: string,
+  runtime: RuntimeRow,
   type: SandboxType,
   size: MachineSpec,
   env: Record<string, string>,
@@ -97,22 +109,23 @@ async function provisionInner(
 
   // Reserve host ports up front: the allocator reads the rows, so inserting
   // before create keeps two concurrent sandboxes off the same host port.
-  const ports = await reservePrepublishPorts(id);
+  const ports = await reservePrepublishPorts(id, runtime);
 
   try {
+    const driver = driverFor(runtime.id);
     const options = { sandboxId: id, type, size, env, ports };
     let handle: DriverHandle;
 
     if (!source) {
-      handle = await driver().create(options);
+      handle = await driver.create(options);
     } else if (source.kind === "snapshot") {
-      handle = await driver().restore({ ...options, fromRef: source.driverRef });
+      handle = await driver.restore({ ...options, fromRef: source.driverRef });
     } else {
-      handle = await driver().fork({ ...options, fromRef: source.driverRef });
+      handle = await driver.fork({ ...options, fromRef: source.driverRef });
     }
 
-    await republishPorts(id, handle.ip ?? null);
-    await runBootstrap(id, handle.ref);
+    await republishPorts(id, driver);
+    await runBootstrap(id, driver, handle.ref);
     await store.update(id, {
       state: "ready",
       url: handle.url,
@@ -126,7 +139,7 @@ async function provisionInner(
     // boat's `setupScript`: starts once the sandbox is usable and never blocks
     // it becoming ready, so a slow script does not delay the 202.
 
-    if (setupScript !== undefined) void runSetupScript(id, handle.ref, setupScript);
+    if (setupScript !== undefined) void runSetupScript(id, driver, handle.ref, setupScript);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await store.deletePortsOf(id);
@@ -152,7 +165,13 @@ export async function requireLiveSandbox(id: string) {
     throw new ServiceError("sandbox_not_ready", `sandbox is ${sandbox.state}; resume it first`);
   }
 
-  return { sandbox, ref: (await store.raw(id))!.driverRef ?? `msb:${id}` };
+  const row = (await store.raw(id))!;
+
+  return {
+    sandbox,
+    ref: row.driverRef ?? `msb:${id}`,
+    driver: driverFor(row.runtimeId),
+  };
 }
 
 export async function getSandbox(id: string): Promise<Sandbox> {
@@ -284,6 +303,8 @@ async function stopInner(
     throw new ServiceError("sandbox_not_ready", `sandbox is ${sandbox.state}, not running`);
   }
 
+  const driver = driverFor(sandbox.runtimeId);
+
   // Reuse an in-flight stop so repeat calls return the same id.
   let stopRow = await store.pendingStop(id);
 
@@ -305,7 +326,7 @@ async function stopInner(
   await store.event(id, "sandbox.stopping");
 
   try {
-    const { diskRef } = await driver().stop(id);
+    const { diskRef } = await driver.stop(id);
     await store.update(id, {
       state: "archived",
       stoppedAt: now(),
@@ -366,6 +387,8 @@ async function resumeInner(
 
   const type = options.type ?? sandbox.type;
   const size = await requireActiveMachineSize(type);
+  const driver = driverFor(sandbox.runtimeId);
+  await assertRoom(sandbox.runtimeId, size);
   // A resume ends any pending stop early, as `superseded`.
   const pending = await store.pendingStop(id);
 
@@ -400,15 +423,15 @@ async function resumeInner(
   await store.event(id, "sandbox.resuming", resuming);
 
   try {
-    const handle = await driver().resume({
+    const handle = await driver.resume({
       sandboxId: id,
       type,
       size,
       fromRef: row.driverRef,
       env: await store.env(id),
     });
-    await republishPorts(id, handle.ip ?? null);
-    await runBootstrap(id, handle.ref);
+    await republishPorts(id, driver);
+    await runBootstrap(id, driver, handle.ref);
     await store.update(id, {
       state: "ready",
       url: handle.url,
@@ -449,6 +472,7 @@ async function forkInner(
   const newId_ = newSandboxId();
   const type = overrides.type ?? source.type;
   const size = await requireActiveMachineSize(type);
+  const runtime = await pickRuntime({ sourceRuntimeId: row.runtimeId, size });
   await store.insert({
     id: newId_,
     name: overrides.name ?? `${source.name} (fork)`,
@@ -459,14 +483,16 @@ async function forkInner(
     ttlSeconds: overrides.ttlSeconds ?? 3600,
     archiveAfter: ttlToArchiveAfter(overrides.ttlSeconds ?? 3600),
     forkOf: id,
+    runtimeId: runtime.id,
   });
   await store.event(newId_, "sandbox.fork", { from: id });
   await store.event(id, "sandbox.forked", { into: newId_ });
 
-  void provision(newId_, type, size, overrides.env ?? {}, {
+  void provision(newId_, runtime, type, size, overrides.env ?? {}, {
     kind: "sandbox",
     id,
     driverRef: row.driverRef,
+    runtimeId: row.runtimeId,
   }).catch(() => {});
 
   return (await store.get(newId_))!;
@@ -476,14 +502,14 @@ async function forkInner(
  * Run the operator's bootstrap snippet. A failure is recorded as an event and
  * ignored: a sandbox that boots is still useful without extra packages.
  */
-async function runBootstrap(id: string, ref: string): Promise<void> {
+async function runBootstrap(id: string, driver: SandboxDriver, ref: string): Promise<void> {
   const script = config.bootstrap.trim();
 
   if (!script || config.driver === "mock") return;
 
   const started = Date.now();
   try {
-    const result = await driver().exec(ref, {
+    const result = await driver.exec(ref, {
       command: script,
       timeoutSeconds: config.bootstrapTimeoutSeconds,
       // Operator plumbing: `apk add` and friends need root.
@@ -509,12 +535,17 @@ async function runBootstrap(id: string, ref: string): Promise<void> {
  * user. Its outcome is recorded as an event rather than surfaced as
  * `setupStatus`, which this server does not implement — see docs/decision/0021.
  */
-async function runSetupScript(id: string, ref: string, script: string): Promise<void> {
+async function runSetupScript(
+  id: string,
+  driver: SandboxDriver,
+  ref: string,
+  script: string,
+): Promise<void> {
   if (config.driver === "mock") return;
 
   const started = Date.now();
   try {
-    const result = await driver().exec(ref, {
+    const result = await driver.exec(ref, {
       command: script,
       timeoutSeconds: config.bootstrapTimeoutSeconds,
     });
@@ -538,9 +569,10 @@ export async function destroySandbox(id: string): Promise<void> {
 }
 
 async function destroyInner(id: string): Promise<void> {
-  await requireSandbox(id);
+  const sandbox = await requireSandbox(id);
+  const driver = driverFor(sandbox.runtimeId);
   try {
-    await driver().destroy(id);
+    await driver.destroy(id);
   } catch {
     // Deleting a sandbox whose machine already died must still succeed.
   }
@@ -565,8 +597,10 @@ export async function recoverSandbox(id: string) {
     );
   }
 
+  const driver = driverFor(sandbox.runtimeId);
+
   // A reachable sandbox needs no recovery.
-  const reachable = await driver()
+  const reachable = await driver
     .exec(`msb:${id}`, { command: "true", timeoutSeconds: 5 })
     .then((r) => r.exitCode === 0)
     .catch(() => false);
@@ -594,7 +628,7 @@ export async function recoverSandbox(id: string) {
   await store.event(id, "sandbox.recover");
   await store.update(id, { state: "provisioning" });
   try {
-    await driver().restart(id);
+    await driver.restart(id);
     await store.update(id, { state: "ready", error: null });
     await store.event(id, "sandbox.recovered");
   } catch (error) {

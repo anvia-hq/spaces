@@ -93,6 +93,28 @@ SPACES_IT=1 SPACES_MSB_HOST=box SPACES_MSB_IMAGE=spaces/guest:ubuntu SPACES_IT_R
 They cover what a mock cannot: commands running as `user`, file ownership, the detached-command timeout
 and its `setsid` escape, and the tools the ready image ships.
 
+## A second runtime
+
+The API is a control plane and a machine is a runtime ([decision 0042](docs/decision/0042-control-plane-and-runtimes.md)).
+A real machine is installed with one command from the console ([decision 0043](docs/decision/0043-install-a-runtime-with-one-command.md)).
+To try more than the built-in one on your own machine, use the mock driver so no hypervisor is needed:
+
+```bash
+bun run dev:api                                                   # control plane on :8787
+curl -s -X POST localhost:8787/api/v1/runtimes -H 'authorization: Bearer sk_local_dev' \
+  -H 'content-type: application/json' -d '{"name":"edge"}'         # prints the token once
+SPACES_DRIVER=mock SPACES_CONTROL_URL=http://localhost:8787 SPACES_RUNTIME_TOKEN=spr_… \
+  SPACES_PORT_RANGE_START=23000 SPACES_PORT_RANGE_END=23099 bun run dev:agent
+```
+
+`install.sh` and the `spaces` CLI (`apps/cli`) are tested without installing anything: the CLI against fakes, the
+script against a fake machine and a local archive (`bun run test:scripts`), and the command a service runs
+(`spaces runtime run`) as a real process in `apps/api`'s tests.
+
+`SPACES_LOCAL_RUNTIME=off` on the API leaves only agents. The runtime tests (`src/modules/runtimes/`)
+start real agents against the real app on an ephemeral port, so they cover the protocol, reconnection
+and scheduling without any of this.
+
 ## Guest image
 
 The default `alpine` image is tiny and boots in ~250 ms, but it has no glibc, no `curl`, no `git` and no

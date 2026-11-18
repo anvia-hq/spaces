@@ -7,10 +7,13 @@ import type {
   ExecRequest,
   ExecResult,
   PortMapping,
+  ProxyRequest,
+  ProxyResponse,
   SandboxDriver,
 } from "./types.ts";
 import { DriverFailure } from "../../errors.ts";
-import { parseKeyValues, runRemote } from "./ssh.ts";
+import { isLocalHost, parseKeyValues, runRemote } from "./ssh.ts";
+import { closeTunnel, tunnelFor } from "./tunnel.ts";
 
 export interface MicrosandboxDriverOptions {
   /** SSH destination of the host running `msb`, or `local`. */
@@ -416,6 +419,75 @@ export class MicrosandboxDriver implements SandboxDriver {
       "--port-rm",
       `${mapping.hostPort}:${mapping.guestPort}`,
     ]).catch(() => {});
+  }
+
+  async listeningPorts(): Promise<number[] | null> {
+    if (isLocalHost(this.host)) return null;
+
+    try {
+      const { stdout, code } = await runRemote(this.host, [
+        "sh",
+        "-c",
+        "ss -H -tln 2>/dev/null | awk '{print $4}' || netstat -tln 2>/dev/null | awk '{print $4}'",
+      ]);
+
+      if (code !== 0 && !stdout.trim()) return null;
+
+      const ports = new Set<number>();
+      for (const token of stdout.split(/\s+/)) {
+        const match = /:(\d+)$/.exec(token.trim());
+
+        if (match) ports.add(Number(match[1]));
+      }
+
+      return ports.size === 0 ? null : [...ports];
+    } catch {
+      return null;
+    }
+  }
+
+  async isPortFree(port: number, bind: string): Promise<boolean> {
+    try {
+      const server = Bun.listen({ hostname: bind, port, socket: { data() {} } });
+      server.stop(true);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async forgetPort(hostPort: number): Promise<void> {
+    closeTunnel(this.host, hostPort);
+  }
+
+  async proxyHttp(request: ProxyRequest): Promise<ProxyResponse> {
+    let dialPort: number;
+    try {
+      dialPort = await tunnelFor(this.host, request.hostPort);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new DriverFailure(`could not reach the published port on ${this.host} (${message})`);
+    }
+
+    let upstream: Response;
+    try {
+      upstream = await fetch(`http://127.0.0.1:${dialPort}${request.path}`, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body ? new Uint8Array(request.body) : undefined,
+        redirect: "manual",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new DriverFailure(`nothing answered on the published port (${message})`);
+    }
+
+    return {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: [...upstream.headers.entries()],
+      body: upstream.body,
+    };
   }
 
   /** Power-cycle: the disk survives, which is what a microVM restart gives us. */

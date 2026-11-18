@@ -12,7 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import type { Runtime } from "@/lib/api.ts";
 import { cn } from "@/lib/utils";
+
+const AUTO_RUNTIME = "__auto__";
 
 const TTL_CHOICES = [
   { value: "900", label: "15 min" },
@@ -35,23 +39,27 @@ export function CreateSandboxDialog({
   open,
   onOpenChange,
   sizes,
+  runtimes,
   busy,
   onCreate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sizes: MachineSize[];
+  runtimes: Runtime[];
   busy: boolean;
   onCreate: (input: {
     type: SandboxType;
     ttlSeconds: number | null;
     name?: string;
+    runtime?: string;
   }) => Promise<void>;
 }) {
   const first = sizes[0]?.name;
   const [type, setType] = useState<SandboxType | undefined>(first);
   const [ttl, setTtl] = useState<string>("3600");
   const [name, setName] = useState("");
+  const [runtime, setRuntime] = useState(AUTO_RUNTIME);
 
   useEffect(() => {
     if (type && sizes.some((size) => size.name === type)) return;
@@ -63,17 +71,25 @@ export function CreateSandboxDialog({
     setType(first);
     setTtl("3600");
     setName("");
+    setRuntime(AUTO_RUNTIME);
   }
 
   function submit() {
     if (busy || !type) return;
 
-    const input: { type: SandboxType; ttlSeconds: number | null; name?: string } = {
+    const input: {
+      type: SandboxType;
+      ttlSeconds: number | null;
+      name?: string;
+      runtime?: string;
+    } = {
       type,
       ttlSeconds: ttl === "none" ? null : Number(ttl),
     };
 
     if (name.trim()) input.name = name.trim();
+
+    if (runtime !== AUTO_RUNTIME) input.runtime = runtime;
 
     void onCreate(input).then(() => {
       reset();
@@ -175,6 +191,27 @@ export function CreateSandboxDialog({
               onChange={(event) => setName(event.target.value)}
             />
           </div>
+
+          {runtimes.length > 1 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-base font-medium text-muted-foreground">Runtime</span>
+              <Select value={runtime} onValueChange={(value) => setRuntime(String(value))}>
+                <SelectTrigger className="h-8 w-full text-base">
+                  <span className="truncate">
+                    {runtime === AUTO_RUNTIME ? "Auto (least loaded)" : runtime}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={AUTO_RUNTIME}>Auto (least loaded)</SelectItem>
+                  {runtimes.map((choice) => (
+                    <SelectItem key={choice.id} value={choice.name}>
+                      {choice.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </form>
 
         <DialogFooter>

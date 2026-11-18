@@ -9,13 +9,14 @@ Bun workspace monorepo (TypeScript, ESM). The API and the console are the produc
 lives in `deploy/guest`.
 
 ```
-apps/api/     Hono API, the REST surface, one module per feature
+apps/api/     Hono API, the REST surface, one module per feature; also the runtime agent (src/agent.ts)
 apps/web/     React console (Vite, TanStack Router, Base UI, shadcn)
+apps/cli/     the `spaces` command installed on a runtime machine (install, status, doctor, update)
 packages/db/  Drizzle + Postgres, migrations in drizzle/
 packages/shared/  the wire: zod request/response schemas, no imports but zod
 docs/         decisions and the endpoint reference
 deploy/       the unit file, the env template, the guest Dockerfile
-scripts/      deploy and install helpers
+scripts/      deploy and install helpers (install.sh, at the root, installs a runtime: decision 0043)
 ```
 
 ## Commands
@@ -31,6 +32,8 @@ bun run format              # oxfmt (format:check to verify only)
 bun run test:rules          # the oxlint plugin's own tests
 bun run build               # builds the console into apps/web/dist (and regenerates routeTree.gen.ts)
 bun run test                # apps/api tests (mock driver; the guest ones skip unless SPACES_IT=1)
+bun run --cwd apps/api agent         # a runtime agent in the foreground: SPACES_CONTROL_URL + SPACES_RUNTIME_TOKEN
+bun run test:scripts                # install.sh against a fake machine and a local archive (no network, no service), and apps/cli
 bun run --cwd apps/api auth:schema   # regenerate the Better Auth tables after changing the plugin set
 bun run test:guest          # the opt-in tests that need a real microVM
 bun run db:migrate-from-sqlite <db>   # one-way move out of a SQLite deployment
@@ -86,7 +89,8 @@ types.ts     exported types shared inside the module
   (the bearer check), `json-body.ts` (empty body means `{}`), `origin.ts`, `console.ts` (serving the
   built console). `app.ts` only mounts middleware and routers.
 - Modules are mounted with `app.route(prefix, router)`, so a router's paths are relative to
-  `/api/v1`. The exception is `system`, mounted at `/`, which owns `/health` and `/api/v1/limits`.
+  `/api/v1`. The exceptions are `system`, mounted at `/`, which owns `/health` and `/api/v1/limits`,
+  and `runtimes/connect.ts`, mounted at `/`, which owns the agent WebSocket `/runtime/connect`.
 - The driver seam is a module (`modules/driver/`): the `SandboxDriver` interface in `types.ts`, the
   singleton in `service.ts`, and one file per implementation (`microsandbox`, `mock`, `ssh` transport).
 - Tests sit beside the code (`*.test.ts`) and run on the mock driver; `src/testing/setup.ts` is the
@@ -105,7 +109,15 @@ types.ts     exported types shared inside the module
   is carried on `AsyncLocalStorage` (`src/scope.ts`) and every owned read is filtered in `db.ts`,
   so a handler cannot forget to scope (docs/decision/0028). Services never take an owner parameter.
 
-Dependency direction: `driver` ← everything; `sandboxes` ← `files`, `commands`, `snapshots`, `ports`,
+- Runtimes (decision 0042): the API is a control plane, and a machine is a runtime. `modules/runtimes`
+  holds the registry, the scheduler (`pickRuntime`) and the agent socket (`connect.ts`, `session.ts`,
+  `connections.ts`); `modules/runtime-agent` is the agent's side, run by `src/agent.ts`, and imports
+  no database code. A service never calls a driver singleton: it gets one from `driverFor(runtimeId)`
+  or from `requireLiveSandbox` (which returns the sandbox's driver), so a sandbox always goes to the
+  runtime that holds its disk. A new `SandboxDriver` method must be added to `DRIVER_METHODS` in
+  `@spaces/shared/runtime`; `driver/remote.ts` fails to compile until it is.
+
+Dependency direction: `driver` ← everything; `runtimes` ← `sandboxes` and everything that picks a runtime; `sandboxes` ← `files`, `commands`, `snapshots`, `ports`,
 `ssh`, `usage`; `files` ← `files/sign.ts` users (`snapshots`, `ports`) and ← `transfers`; `transfers` ←
 `files` and `snapshots`. No cycles.
 

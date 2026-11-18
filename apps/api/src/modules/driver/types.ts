@@ -1,5 +1,6 @@
 import type { SandboxType } from "@spaces/shared/sandbox";
 import type { FileEntry, FileMatch } from "@spaces/shared/files";
+import type { DriverMethod } from "@spaces/shared/runtime";
 
 /** A live machine handle returned by any driver lifecycle call. */
 export interface DriverHandle {
@@ -67,6 +68,21 @@ export interface CreateOptions {
   /** Boot from this snapshot/disk image instead of the base image. */
   fromRef?: string;
   env?: Record<string, string>;
+}
+
+export interface ProxyRequest {
+  hostPort: number;
+  method: string;
+  path: string;
+  headers: [string, string][];
+  body: Uint8Array | null;
+}
+
+export interface ProxyResponse {
+  status: number;
+  statusText: string;
+  headers: [string, string][];
+  body: ReadableStream<Uint8Array> | null;
 }
 
 export interface SandboxDriver {
@@ -194,4 +210,23 @@ export interface SandboxDriver {
     pattern: string,
     options: { ignoreCase: boolean; maxResults: number },
   ): Promise<{ matches: FileMatch[]; truncated: boolean }>;
+
+  /* ---- the host's published ports ---- */
+
+  /** Ports already listening on the host, or null when they have to be probed one by one. */
+  listeningPorts(): Promise<number[] | null>;
+  isPortFree(port: number, bind: string): Promise<boolean>;
+  /** Drop whatever the driver holds open for a host port that is no longer published. */
+  forgetPort(hostPort: number): Promise<void>;
+  /** Send one HTTP request to a host port the runtime published, and stream the answer back. */
+  proxyHttp(request: ProxyRequest): Promise<ProxyResponse>;
+}
+
+export interface DriverTransport {
+  call(method: DriverMethod, args: unknown[]): Promise<unknown>;
+}
+
+export interface AttachedDriver {
+  driver: SandboxDriver;
+  label: string;
 }

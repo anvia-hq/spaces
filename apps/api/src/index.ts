@@ -1,7 +1,14 @@
 import { app } from "./app.ts";
 import { config } from "./config.ts";
 import { store } from "./db.ts";
-import { driver } from "./modules/driver/service.ts";
+import { localDriver } from "./modules/driver/service.ts";
+import { runtimeWebsocket } from "./modules/runtimes/connect.ts";
+import {
+  ensureLocalRuntime,
+  isRuntimeReachable,
+  resetRuntimeStates,
+} from "./modules/runtimes/service.ts";
+import { sweepLiveness } from "./modules/runtimes/session.ts";
 import { stopSandbox } from "./modules/sandboxes/service.ts";
 import { promoteListedAtBoot, promotionEntry } from "./modules/auth/admins.ts";
 import * as audit from "./modules/audit/service.ts";
@@ -16,6 +23,8 @@ async function reap() {
     if (!["ready", "running", "idle", "provisioning"].includes(sandbox.state)) return false;
 
     if (!sandbox.archiveAfter) return false;
+
+    if (!isRuntimeReachable(sandbox.runtimeId)) return false;
 
     return new Date(sandbox.archiveAfter).getTime() <= now;
   });
@@ -70,14 +79,21 @@ async function sweep() {
 
 setInterval(() => void sweep(), 10 * 60_000);
 
+await resetRuntimeStates();
+await ensureLocalRuntime();
+setInterval(() => sweepLiveness(), config.runtime.offlineSweepMs);
+
 console.log(
-  `[api] driver=${driver().kind} capabilities=${JSON.stringify(driver().capabilities)} port=${config.port}`,
+  config.runtime.local
+    ? `[api] driver=${localDriver().kind} capabilities=${JSON.stringify(localDriver().capabilities)} port=${config.port}`
+    : `[api] built-in runtime off; waiting for agents on port=${config.port}`,
 );
 
 export default {
   port: config.port,
   hostname: config.bindHost,
   fetch: app.fetch,
+  websocket: runtimeWebsocket,
   /** Long command timeouts need a generous idle window. */
   idleTimeout: 255,
 };

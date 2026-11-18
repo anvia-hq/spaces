@@ -50,6 +50,20 @@
       "when": 1794894458118,
       "tag": "0006_puzzling_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794973426082,
+      "tag": "0007_mixed_quentin_quire",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794975396374,
+      "tag": "0008_dashing_surge",
+      "breakpoints": true
     }
   ]
 }

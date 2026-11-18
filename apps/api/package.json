@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
+    "agent": "bun run src/agent.ts",
+    "dev:agent": "bun run --watch src/agent.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:guest": "SPACES_IT=1 bun test src/modules/driver/guest.test.ts",

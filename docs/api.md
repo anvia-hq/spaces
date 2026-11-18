@@ -9,7 +9,9 @@ same zod schemas in `packages/shared`; a change to it lands with a decision reco
 - Errors: `{ ok: false, type, status, code, message, requestId, error: { code, message, status } }`
 - Schemas: [`packages/shared`](../packages/shared) — one file per domain
 
-`GET /health` sits at the root, outside `/api/v1`, and needs no auth.
+`GET /health` sits at the root, outside `/api/v1`, and needs no auth. It reports the built-in
+runtime's driver and `runtimes: { online, total }`. `GET /runtime/connect` also sits at the root: it
+is the WebSocket a [runtime agent](#runtimes) dials, and it takes a runtime token, not an API key.
 
 The surface covers sandboxes, files, commands, snapshots, ports, SSH, usage and the machine sizes a
 sandbox can be created at. Routes for a capability this deployment does not run are absent or answer
@@ -52,6 +54,7 @@ earlier version are accepted rather than rejected, and recorded in
 | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `type`, `ttlSeconds`, `labels`, `env`, `name`                                                                                 | **Honoured.** `ttlSeconds: null` (or the legacy `"infinite"`) disables auto-stop; `env` is injected into the guest                        |
 | `from`                                                                                                                        | **Honoured** for a sandbox id (fork its disk) or a saved snapshot name visible to the caller (restore its disk). Never a silent cold boot |
+| `runtime`                                                                                                                     | **Honoured.** A runtime id or name to create on. Omitted, the control plane picks one; see [runtimes](#runtimes)                          |
 | `setupScript`                                                                                                                 | **Honoured**: runs once after `ready` as `user`; the outcome is recorded as a `sandbox.setup_script` event                                |
 | `environment`, `noEnv`, `visibility`, `snapshots`, `monitoring`, `failFast`, `count`, `hostedPorts`, `files`, `org`, `teamId` | **Accepted and ignored.** Write `files` with `PUT /sandboxes/{id}/files`; publish `hostedPorts` with `POST /sandboxes/{id}/host`          |
 
@@ -81,6 +84,103 @@ with are `small`, `default`, `large` and `xlarge`.
   RAM and disk.
 - Resuming or forking into a different `type` applies that preset's current numbers to a new boot.
   Editing a preset does not resize sandboxes already running at it.
+
+## Runtimes
+
+A runtime is a machine that runs sandboxes. The control plane (this API) keeps the accounts, the
+store and the console and schedules onto runtimes; the built-in `local` runtime is the driver
+embedded in the API process, and any number of agent runtimes can be registered beside it (decision
+[0042](./decision/0042-control-plane-and-runtimes.md)).
+
+| Method   | Path                        | Notes                                                                           |
+| -------- | --------------------------- | ------------------------------------------------------------------------------- |
+| `GET`    | `/runtimes`                 | Every runtime with its load; any authenticated caller                           |
+| `GET`    | `/runtimes/{runtime}`       | By id (`rt_…`, or `local`) or by name                                           |
+| `POST`   | `/runtimes`                 | Admin only; `{ name, labels?, maxSandboxes? }`; answers `201` with `token` once |
+| `PATCH`  | `/runtimes/{runtime}`       | Admin only; any of `name`, `labels`, `maxSandboxes` (`null` clears), `draining` |
+| `POST`   | `/runtimes/{runtime}/token` | Admin only; new token, and the connected agent is cut off at once               |
+| `DELETE` | `/runtimes/{runtime}`       | Admin only; `409` while it holds sandboxes or snapshots, `403` for `local`      |
+
+Changes need the operator key or an account with the `admin` role, exactly like
+[machine sizes](#machine-sizes), and are in the [audit log](#audit-log) as `runtime.create`,
+`runtime.update`, `runtime.token_rotate` and `runtime.delete`. The token is never in the log.
+
+```json
+{
+  "id": "rt_3f9a1c07b2d4",
+  "name": "edge-1",
+  "kind": "agent",
+  "state": "online",
+  "draining": false,
+  "labels": { "zone": "eu" },
+  "maxSandboxes": 8,
+  "activeSandboxes": 3,
+  "totalSandboxes": 5,
+  "snapshots": 2,
+  "resources": { "vcpu": 16, "memMib": 31744 },
+  "committed": { "vcpu": 6, "memMib": 12288 },
+  "driver": "microsandbox",
+  "capabilities": { "exec": true, "files": true, "persistence": true },
+  "publicHost": "edge-1.example.com",
+  "agentVersion": "0.1.0",
+  "tokenPrefix": "spr_d2f1096d",
+  "connectedAt": "2026-11-18T03:54:51.860Z",
+  "lastSeenAt": "2026-11-18T03:56:11.002Z",
+  "createdAt": "2026-11-18T03:50:00.000Z"
+}
+```
+
+`resources` is what the runtime reported (`null` if nothing); `committed` is the sum of the sizes of
+its active sandboxes. Capacity is reserved, not measured: an idle sandbox still holds its size.
+
+**Registering a runtime** is two steps: `POST /runtimes` (the console's Register button), then run the
+installer **on that machine** with the token. The runtime dials out, so the machine needs no inbound
+port:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/anvia-hq/spaces/main/install.sh | bash -s -- \
+  --runtime --url https://spaces.example.com --token spr_… --public-host edge-1.example.com
+```
+
+The console shows this command with the token filled in. The installer checks the host, reaches the
+control plane and asks it whether the token is known before it writes anything, then installs a user
+service and waits for the connection; running it again updates
+([decision 0043](./decision/0043-install-a-runtime-with-one-command.md)). `PATCH /runtimes/{runtime}`
+with `name` renames a runtime; its id and sandboxes do not change.
+
+**Where a sandbox goes.** Every sandbox, and every snapshot made from it, records the `runtimeId` it
+lives on, because its disk is on that machine. Resume, fork, stop, snapshot, files, commands and
+previews all go there; nothing moves a disk. Only a create with no source chooses:
+
+- `runtime` on the create request pins it to that runtime. An unknown one is `404`.
+- Otherwise the control plane picks among the runtimes that are `online`, not `draining`, under
+  `maxSandboxes` and with room for the size. Each runtime reports its vCPU and memory, and what its
+  active sandboxes hold is the sum of their machine sizes. Of those that fit, the one that would be
+  least full afterwards wins, judged on the fuller of vCPU and memory. Ties go to fewer active
+  sandboxes, then the lower name. A runtime that reported no capacity is never refused for room and
+  is used only when no measured runtime fits.
+- `from` pins to the runtime that holds the source disk. Naming a different `runtime` answers
+  `400`.
+- A `draining` runtime keeps what it has and takes nothing new, including forks and restores whose
+  source is on it (`403`). A runtime at its cap, or without room for the size, answers `403` when
+  pinned to, with what was asked and what is free.
+- **Resume is checked too.** A stopped sandbox holds no capacity, so `POST /sandboxes/{id}/resume`
+  (and a resume into a bigger `type`) answers `403` if its runtime has no room, and the sandbox
+  stays `archived`.
+
+**When a runtime is away.** An agent that disconnects, or goes three heartbeats (15 s) without a
+word, is `offline`. Reads of its sandboxes still answer from the store. Anything that has to reach
+the machine answers `503 runtime_unavailable` (retryable) and changes nothing: a stop does not mark
+the sandbox `error`, and a delete is refused rather than orphaning the machine. The auto-stop sweep
+skips an offline runtime's sandboxes and tries again when it returns. With nothing able to take a
+new sandbox, a create answers `503` and lists each runtime's reason.
+
+**Ports and previews.** Each runtime allocates host ports from the range it advertised
+(`SPACES_PORT_RANGE_START`/`_END` on the agent) and binds them to its own loopback. Preview URLs are
+served by the control plane, which streams the request to the runtime and the answer back, so a
+runtime is never reached directly. A file larger than about 90 MiB cannot be written to an agent
+runtime (`413 file_too_large`); the built-in runtime has no such ceiling beyond `SPACES_TRANSFER_MAX`. `sshEndpoint` from `POST /sandboxes/{id}/sshkey` names the
+runtime's `publicHost`; SSH itself is not relayed (decision 0042).
 
 ## Machine sizes
 

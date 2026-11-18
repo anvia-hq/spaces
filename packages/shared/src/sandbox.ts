@@ -78,6 +78,7 @@ export const SandboxSchema = z.object({
   snapshotCompletedAt: z.string().datetime().nullable().optional(),
   hydrated: z.boolean().default(true),
   hydratedAt: z.string().datetime().nullable().optional(),
+  runtimeId: z.string().default("local"),
 });
 export type Sandbox = z.infer<typeof SandboxSchema>;
 
@@ -162,6 +163,8 @@ export const CreateSandboxRequest = z
      * a create source (decision 0038).
      */
     from: z.string().min(1).optional(),
+    /** Runtime to create on, by id or name; omitted lets the scheduler choose (decision 0042). */
+    runtime: z.string().min(1).max(64).optional(),
 
     /* Accepted for boat parity; deliberately not acted on (docs/decision/0021). */
     environment: z.string().max(120).optional(),

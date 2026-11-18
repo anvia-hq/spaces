@@ -1,9 +1,8 @@
 import type { Handler } from "hono";
-import { config } from "../../config.ts";
 import type { ApiEnv } from "../../errors.ts";
 import { verifyTransferToken } from "../files/sign.ts";
+import { driverOfSandbox } from "../runtimes/service.ts";
 import { previewPath, resolvePreview } from "./service.ts";
-import { tunnelFor } from "./tunnel.ts";
 
 /**
  * Reverse proxy for a published port.
@@ -57,29 +56,8 @@ export const proxyPreview: Handler<ApiEnv> = async (c) => {
   const forwardedQuery = new URLSearchParams(url.searchParams);
   forwardedQuery.delete("_token");
   const query = forwardedQuery.toString();
-  // When msb lives on another machine the published port is on that machine's
-  // loopback, so the request goes through a local SSH forward.
-  let dialPort: number;
-  try {
-    dialPort = await tunnelFor(config.msbHost, row.hostPort);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return c.json(
-      {
-        ok: false as const,
-        type: "sandbox.error" as const,
-        status: 502,
-        code: "boat_direct_failed" as const,
-        message: `Could not reach the published port on ${config.msbHost} (${message}).`,
-      },
-      502,
-    );
-  }
-  const target = `http://127.0.0.1:${dialPort}${suffix}${query ? `?${query}` : ""}`;
-
+  const driver = await driverOfSandbox(sandboxId);
   const headers = new Headers(c.req.raw.headers);
-  // The upstream host is the loopback port; auth belongs to the API, and asking
-  // for compression would leave a body whose headers no longer match.
   headers.delete("host");
   headers.delete("authorization");
   headers.delete("accept-encoding");
@@ -87,28 +65,13 @@ export const proxyPreview: Handler<ApiEnv> = async (c) => {
 
   const method = c.req.method;
   const hasBody = !["GET", "HEAD"].includes(method);
-
-  let upstream: Response;
-  try {
-    upstream = await fetch(target, {
-      method,
-      headers,
-      body: hasBody ? await c.req.arrayBuffer() : undefined,
-      redirect: "manual",
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return c.json(
-      {
-        ok: false as const,
-        type: "sandbox.error" as const,
-        status: 502,
-        code: "boat_direct_failed" as const,
-        message: `Nothing answered on port ${guestPort} inside the sandbox (${message}).`,
-      },
-      502,
-    );
-  }
+  const upstream = await driver.proxyHttp({
+    hostPort: row.hostPort,
+    method,
+    path: `${suffix}${query ? `?${query}` : ""}`,
+    headers: [...headers.entries()],
+    body: hasBody ? new Uint8Array(await c.req.arrayBuffer()) : null,
+  });
 
   const responseHeaders = new Headers(upstream.headers);
   // Length and encoding describe the upstream body, not necessarily this one.

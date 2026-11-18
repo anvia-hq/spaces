@@ -21,6 +21,18 @@ export const config = {
    */
   driver: (process.env.SPACES_DRIVER ?? "microsandbox") as "microsandbox" | "mock",
 
+  runtime: {
+    local: (process.env.SPACES_LOCAL_RUNTIME ?? "on") !== "off",
+    controlUrl: process.env.SPACES_CONTROL_URL ?? "",
+    token: process.env.SPACES_RUNTIME_TOKEN ?? "",
+    publicHost: process.env.SPACES_RUNTIME_PUBLIC_HOST ?? "",
+    offlineSweepMs: Number(process.env.SPACES_RUNTIME_SWEEP_MS ?? 5_000),
+    vcpu: Number(process.env.SPACES_RUNTIME_VCPU ?? 0),
+    memMib: Number(process.env.SPACES_RUNTIME_MEM_MIB ?? 0),
+    reserveMib: Number(process.env.SPACES_RUNTIME_RESERVE_MIB ?? 1024),
+    overcommit: Number(process.env.SPACES_RUNTIME_OVERCOMMIT ?? 1),
+  },
+
   /**
    * Where `msb` runs. `local` means this machine; anything else is an SSH host.
    * microsandbox is cross-platform (KVM / Hypervisor.framework / WHP), so local

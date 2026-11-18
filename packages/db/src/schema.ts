@@ -23,6 +23,40 @@ import {
 
 const createdAt = (column: string) => timestamp(column, { withTimezone: true, mode: "date" });
 
+export const runtimes = pgTable(
+  "runtimes",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull().unique(),
+    kind: text("kind").notNull(),
+    state: text("state").notNull().default("offline"),
+    draining: boolean("draining").notNull().default(false),
+    labels: jsonb("labels").$type<Record<string, string>>().notNull().default({}),
+    maxSandboxes: integer("max_sandboxes"),
+    tokenHash: text("token_hash"),
+    tokenPrefix: text("token_prefix"),
+    driverKind: text("driver_kind"),
+    capabilities: jsonb("capabilities").$type<{
+      exec: boolean;
+      files: boolean;
+      persistence: boolean;
+    }>(),
+    vcpu: integer("vcpu"),
+    memMib: integer("mem_mib"),
+    portStart: integer("port_start"),
+    portEnd: integer("port_end"),
+    portBind: text("port_bind"),
+    publicHost: text("public_host"),
+    agentVersion: text("agent_version"),
+    protocol: integer("protocol"),
+    connectedAt: createdAt("connected_at"),
+    lastSeenAt: createdAt("last_seen_at"),
+    createdAt: createdAt("created_at").notNull(),
+    updatedAt: createdAt("updated_at").notNull(),
+  },
+  (table) => [index("runtimes_token_idx").on(table.tokenHash)],
+);
+
 export const sandboxes = pgTable(
   "sandboxes",
   {
@@ -49,10 +83,12 @@ export const sandboxes = pgTable(
     hydratedAt: createdAt("hydrated_at"),
     /** Better Auth user id that owns this sandbox; null for the operator key. */
     ownerId: text("owner_id"),
+    runtimeId: text("runtime_id").notNull().default("local"),
   },
   (table) => [
     index("sandboxes_state_idx").on(table.state),
     index("sandboxes_owner_idx").on(table.ownerId),
+    index("sandboxes_runtime_idx").on(table.runtimeId),
   ],
 );
 
@@ -71,10 +107,12 @@ export const snapshots = pgTable(
     manifest: jsonb("manifest").$type<{ path: string; kind: string; size?: number }[]>(),
     /** Copied from the sandbox so a snapshot dies with its owner, not with the id. */
     ownerId: text("owner_id"),
+    runtimeId: text("runtime_id").notNull().default("local"),
   },
   (table) => [
     index("snapshots_sandbox_idx").on(table.sandboxId),
     index("snapshots_owner_idx").on(table.ownerId),
+    index("snapshots_runtime_idx").on(table.runtimeId),
   ],
 );
 
@@ -287,3 +325,4 @@ export type SnapshotShareRow = typeof snapshotShares.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type SpanRow = typeof spans.$inferSelect;
 export type MachineSizeRow = typeof machineSizes.$inferSelect;
+export type RuntimeRow = typeof runtimes.$inferSelect;

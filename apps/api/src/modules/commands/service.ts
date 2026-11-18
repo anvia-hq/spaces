@@ -2,7 +2,7 @@ import { newId } from "@spaces/shared/errors";
 import { SANDBOX_WORKDIR, resolveSandboxPath } from "@spaces/shared/files";
 import { iso, store } from "../../db.ts";
 import { ServiceError } from "../../errors.ts";
-import { driver } from "../driver/service.ts";
+import { driverOfSandbox } from "../runtimes/service.ts";
 import { requireLiveSandbox, requireSandbox } from "../sandboxes/service.ts";
 
 /** Guest layout of the process runtime; mirrors MicrosandboxDriver.PROC_DIR. */
@@ -14,17 +14,17 @@ export const SANDBOX_PROC_DIR = "/tmp/.spaces/proc";
  * finished process no longer appears in the live table.
  */
 async function resolveProcess(id: string, pid: number) {
-  const { ref } = await requireLiveSandbox(id);
+  const { ref, driver } = await requireLiveSandbox(id);
   const recorded = await store.findCommandByPid(id, pid);
 
-  if (recorded) return { ref, commandId: recorded.id, command: recorded.command };
+  if (recorded) return { ref, driver, commandId: recorded.id, command: recorded.command };
 
-  const processes = await driver().listProcesses(ref);
+  const processes = await driver.listProcesses(ref);
   const match = processes.find((p) => p.pid === pid);
 
   if (!match) throw new ServiceError("not_found", `no process ${pid} in sandbox ${id}`);
 
-  return { ref, commandId: match.commandId, command: match.command };
+  return { ref, driver, commandId: match.commandId, command: match.command };
 }
 
 /** boat's CommandRecord status, from the row and whatever the guest last said. */
@@ -116,7 +116,8 @@ export async function runSandboxCommand(
     mode: "sync",
   });
 
-  const result = await driver().exec((await store.raw(id))!.driverRef ?? `msb:${id}`, {
+  const driver = await driverOfSandbox(id);
+  const result = await driver.exec((await store.raw(id))!.driverRef ?? `msb:${id}`, {
     command: request.command,
     cwd: request.cwd,
     timeoutSeconds: request.timeoutSeconds,
@@ -156,7 +157,7 @@ export async function startSandboxProcess(
   request: { command: string; cwd?: string; timeoutSeconds: number },
   mode: "detached" | "stream" = "detached",
 ) {
-  const { ref } = await requireLiveSandbox(id);
+  const { ref, driver } = await requireLiveSandbox(id);
   const cwdResult = resolveSandboxPath(request.cwd ?? SANDBOX_WORKDIR);
 
   if (!cwdResult.ok) {
@@ -168,7 +169,7 @@ export async function startSandboxProcess(
 
   const commandId = newId("cmd");
   const startedAt = new Date().toISOString();
-  const started = await driver().startProcess(ref, {
+  const started = await driver.startProcess(ref, {
     processId: commandId,
     command: request.command,
     cwd: cwdResult.path,
@@ -199,11 +200,11 @@ export async function startSandboxProcess(
 
 export async function sandboxProcessState(id: string, processId: string) {
   const pid = Number(processId);
-  const { ref, commandId } = await resolveProcess(id, pid);
+  const { ref, driver, commandId } = await resolveProcess(id, pid);
 
   if (!commandId) throw new ServiceError("not_found", `no tracked process ${pid}`);
 
-  return driver().processState(ref, commandId);
+  return driver.processState(ref, commandId);
 }
 
 export async function readSandboxProcessOutput(
@@ -212,11 +213,11 @@ export async function readSandboxProcessOutput(
   offsets?: { stdoutOffset?: number; stderrOffset?: number },
 ) {
   const pid = Number(processId);
-  const { ref, commandId } = await resolveProcess(id, pid);
+  const { ref, driver, commandId } = await resolveProcess(id, pid);
 
   if (!commandId) throw new ServiceError("not_found", `no tracked process ${pid}`);
 
-  return driver().readProcessOutput(ref, commandId, offsets);
+  return driver.readProcessOutput(ref, commandId, offsets);
 }
 
 function liveStatusOf(state: { running: boolean; known: boolean } | null) {
@@ -234,22 +235,20 @@ export async function sandboxCommandStatus(
   query: { tailBytes?: number; stdoutOffset?: number; stderrOffset?: number },
 ) {
   const pid = Number(processId);
-  const { ref, commandId } = await resolveProcess(id, pid);
+  const { ref, driver, commandId } = await resolveProcess(id, pid);
 
   if (!commandId) throw new ServiceError("not_found", `no tracked process ${pid}`);
 
   const row = await store.commandById(commandId);
   const usingOffsets = query.stdoutOffset !== undefined || query.stderrOffset !== undefined;
 
-  const output = await driver()
+  const output = await driver
     .readProcessOutput(ref, commandId, {
       stdoutOffset: query.stdoutOffset ?? 0,
       stderrOffset: query.stderrOffset ?? 0,
     })
     .catch(() => null);
-  const state = await driver()
-    .processState(ref, commandId)
-    .catch(() => null);
+  const state = await driver.processState(ref, commandId).catch(() => null);
 
   // Offsets: only what was written since the requested byte position. Otherwise
   // the tail of both logs, capped by tailBytes.
@@ -302,8 +301,8 @@ export async function sandboxCommandStatus(
 
 export async function killSandboxProcess(id: string, processId: string) {
   const pid = Number(processId);
-  const { ref, commandId } = await resolveProcess(id, pid);
-  const { signaled } = await driver().killProcess(ref, commandId ?? processId);
+  const { ref, driver, commandId } = await resolveProcess(id, pid);
+  const { signaled } = await driver.killProcess(ref, commandId ?? processId);
 
   if (commandId) {
     const existing = await store.commandById(commandId);
@@ -312,12 +311,8 @@ export async function killSandboxProcess(id: string, processId: string) {
 
     if (signaled || existing?.finishedAt === null) {
       const [output, state] = await Promise.all([
-        driver()
-          .readProcessOutput(ref, commandId)
-          .catch(() => null),
-        driver()
-          .processState(ref, commandId)
-          .catch(() => null),
+        driver.readProcessOutput(ref, commandId).catch(() => null),
+        driver.processState(ref, commandId).catch(() => null),
       ]);
       await store.finishCommand(commandId, {
         exitCode: state?.exitCode ?? existing?.exitCode ?? null,
@@ -341,8 +336,8 @@ export async function killSandboxProcess(id: string, processId: string) {
 }
 
 export async function listSandboxProcesses(id: string) {
-  const { ref } = await requireLiveSandbox(id);
-  const processes = await driver().listProcesses(ref);
+  const { ref, driver } = await requireLiveSandbox(id);
+  const processes = await driver.listProcesses(ref);
   return {
     live: true as const,
     sampledAt: new Date().toISOString(),

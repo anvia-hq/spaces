@@ -1,11 +1,9 @@
 import { Hono } from "hono";
-import { config } from "../../config.ts";
 import { type ApiEnv, validate } from "../../errors.ts";
 import { publicOrigin } from "../../origin.ts";
 import { proxyPreview } from "./preview.ts";
 import { HostPortRequest } from "./schema.ts";
 import { hostSandboxPort, listHostedPorts, unhostSandboxPort } from "./service.ts";
-import { closeTunnel } from "./tunnel.ts";
 
 export const portsRouter = new Hono<ApiEnv>()
   .post("/sandboxes/:sandboxId/host", validate("json", HostPortRequest), async (c) => {
@@ -53,7 +51,6 @@ export const portsRouter = new Hono<ApiEnv>()
   )
   .delete("/sandboxes/:sandboxId/host/:port", async (c) => {
     const result = await unhostSandboxPort(c.req.param("sandboxId"), Number(c.req.param("port")));
-    closeTunnel(config.msbHost, result.hostPort ?? 0);
     return c.json({ ok: true as const, success: true, type: "port.unhosted" as const, ...result });
   })
   .all("/_preview/:sandboxId/:port", proxyPreview)

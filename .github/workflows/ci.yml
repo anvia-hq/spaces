@@ -50,6 +50,9 @@ jobs:
       - name: Lint rules
         run: bun run test:rules
 
+      - name: Installer and CLI
+        run: bun run test:scripts
+
       - name: Tests
         run: bun run test
 
