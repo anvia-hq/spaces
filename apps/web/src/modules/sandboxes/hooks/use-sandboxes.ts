@@ -29,8 +29,12 @@ export function useSandboxes() {
     [refresh],
   );
 
-  const create = (input: { type: SandboxType; ttlSeconds: number | null; name?: string }) =>
-    act("create", () => api.createSandbox(input), "Sandbox created").then(() => undefined);
+  const create = (input: {
+    type: SandboxType;
+    ttlSeconds: number | null;
+    name?: string;
+    runtime?: string;
+  }) => act("create", () => api.createSandbox(input), "Sandbox created").then(() => undefined);
 
   return { poll, rows, live, busy, act, create };
 }

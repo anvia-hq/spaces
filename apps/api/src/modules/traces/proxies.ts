@@ -11,7 +11,7 @@ function read(target: unknown, property: string | symbol): unknown {
 }
 
 /** Everything async the driver exposes, in one span each. */
-export function tracedDriver(driver: SandboxDriver): SandboxDriver {
+export function tracedDriver(driver: SandboxDriver, runtimeId: string): SandboxDriver {
   return new Proxy(driver, {
     get(target, property) {
       const value = read(target, property);
@@ -27,7 +27,7 @@ export function tracedDriver(driver: SandboxDriver): SandboxDriver {
 
         const span = tracer().startSpan(`driver.${property}`, {
           kind: SpanKind.CLIENT,
-          attributes: { "spaces.sandbox_id": sandboxIdOf(args) },
+          attributes: { "spaces.sandbox_id": sandboxIdOf(args), "spaces.runtime_id": runtimeId },
         });
 
         return context.with(trace.setSpan(context.active(), span), async () => {

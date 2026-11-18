@@ -39,6 +39,7 @@ export const ErrorCodes = {
   rate_limited: 429,
   provider_not_configured: 501,
   boat_direct_failed: 502,
+  runtime_unavailable: 503,
   not_implemented: 501,
   internal: 500,
 } as const;
@@ -49,6 +50,7 @@ export const RETRYABLE = new Set<ErrorCode>([
   "boat_starting",
   "rate_limited",
   "boat_direct_failed",
+  "runtime_unavailable",
 ]);
 
 export function errorEnvelope(

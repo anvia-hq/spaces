@@ -136,6 +136,22 @@ const ROUTES: Record<string, RouteAction> = {
     targetType: "machine_size",
     targetParam: "name",
   },
+  "POST /runtimes": { action: "runtime.create", targetType: "runtime" },
+  "PATCH /runtimes/:runtime": {
+    action: "runtime.update",
+    targetType: "runtime",
+    targetParam: "runtime",
+  },
+  "POST /runtimes/:runtime/token": {
+    action: "runtime.token_rotate",
+    targetType: "runtime",
+    targetParam: "runtime",
+  },
+  "DELETE /runtimes/:runtime": {
+    action: "runtime.delete",
+    targetType: "runtime",
+    targetParam: "runtime",
+  },
   "POST /users/:userId/role": {
     action: "user.role_set",
     targetType: "user",

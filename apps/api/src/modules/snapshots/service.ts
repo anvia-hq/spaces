@@ -3,7 +3,8 @@ import { newId } from "@spaces/shared/errors";
 import { SANDBOX_WORKDIR } from "@spaces/shared/files";
 import { now, store } from "../../db.ts";
 import { ServiceError } from "../../errors.ts";
-import { driver } from "../driver/service.ts";
+import { driverFor } from "../driver/service.ts";
+import type { SandboxDriver } from "../driver/types.ts";
 import { mintTransferToken } from "../files/sign.ts";
 import { requireSandbox } from "../sandboxes/service.ts";
 import { withSpan } from "../traces/tracer.ts";
@@ -43,18 +44,21 @@ export async function snapshotSandbox(id: string, name?: string) {
 }
 
 async function createInner(id: string, name?: string) {
-  await requireSandbox(id);
+  const sandbox = await requireSandbox(id);
+  const driver = driverFor(sandbox.runtimeId);
+  const runtimeId = sandbox.runtimeId;
   const snapshotId = newId("sn");
   await store.insertSnapshot({
     id: snapshotId,
     sandboxId: id,
     name: name ?? null,
     state: "creating",
+    runtimeId,
   });
   await store.event(id, "snapshot.creating", { snapshotId });
 
   try {
-    const { ref, sizeBytes } = await driver().snapshot(id, snapshotId);
+    const { ref, sizeBytes } = await driver.snapshot(id, snapshotId);
     await store.removeSnapshot(snapshotId);
     await store.insertSnapshot({
       id: snapshotId,
@@ -63,6 +67,7 @@ async function createInner(id: string, name?: string) {
       state: "ready",
       sizeBytes,
       driverRef: ref,
+      runtimeId,
     });
     await store.update(id, { snapshotAt: now() });
     await store.event(id, "snapshot.ready", { snapshotId, sizeBytes });
@@ -75,6 +80,7 @@ async function createInner(id: string, name?: string) {
       sandboxId: id,
       name: name ?? null,
       state: "error",
+      runtimeId,
     });
     const message = error instanceof Error ? error.message : String(error);
     await store.event(id, "snapshot.error", { snapshotId, message });
@@ -85,7 +91,7 @@ async function createInner(id: string, name?: string) {
 /** Boot a snapshot in a throwaway sandbox, run fn, then always tear it down. */
 async function withSnapshotRestore<T>(
   snapshot: SnapshotRowLike,
-  fn: (ref: string) => Promise<T>,
+  fn: (ref: string, driver: SandboxDriver) => Promise<T>,
 ): Promise<T> {
   if (!snapshot.driverRef) {
     throw new ServiceError("not_found", "snapshot has no stored artifact");
@@ -95,16 +101,14 @@ async function withSnapshotRestore<T>(
     throw new ServiceError("sandbox_not_ready", `snapshot is ${snapshot.state}`);
   }
 
+  const driver = driverFor(snapshot.runtimeId);
   const name = newId("browse");
   let ref: string | null = null;
   try {
-    ref = (await driver().restoreTemporary(snapshot.driverRef, name)).ref;
-    return await fn(ref);
+    ref = (await driver.restoreTemporary(snapshot.driverRef, name)).ref;
+    return await fn(ref, driver);
   } finally {
-    if (ref)
-      await driver()
-        .removeTemporary(ref)
-        .catch(() => {});
+    if (ref) await driver.removeTemporary(ref).catch(() => {});
   }
 }
 
@@ -127,8 +131,8 @@ export async function snapshotTree(snapshotId: string) {
     return shapeTree(snapshot, snapshot.manifest);
   }
 
-  const entries = await withSnapshotRestore(snapshot, (ref) =>
-    driver().listSnapshotTree(ref, TREE_ROOT, TREE_LIMIT + 1),
+  const entries = await withSnapshotRestore(snapshot, (ref, driver) =>
+    driver.listSnapshotTree(ref, TREE_ROOT, TREE_LIMIT + 1),
   );
 
   await store.setSnapshotManifest(snapshotId, entries.slice(0, TREE_LIMIT));
@@ -172,8 +176,8 @@ export async function snapshotFileEntry(
     .join("/");
   const target = relative ? `${TREE_ROOT}/${relative}` : TREE_ROOT;
 
-  const entry = await withSnapshotRestore(snapshot, (ref) =>
-    driver().readSnapshotEntry(ref, target),
+  const entry = await withSnapshotRestore(snapshot, (ref, driver) =>
+    driver.readSnapshotEntry(ref, target),
   );
   return {
     bytes: entry.bytes,
@@ -189,7 +193,7 @@ export async function deleteSnapshot(snapshotId: string) {
   if (!row) throw new ServiceError("not_found", `no snapshot ${snapshotId}`);
 
   if (row.driverRef)
-    await driver()
+    await driverFor(row.runtimeId)
       .destroySnapshot(row.driverRef)
       .catch(() => {});
 
@@ -208,7 +212,7 @@ export async function deleteSandboxSnapshots(sandboxId: string) {
   const rows = await store.listSnapshots(sandboxId);
   for (const row of rows) {
     if (row.driverRef)
-      await driver()
+      await driverFor(row.runtimeId)
         .destroySnapshot(row.driverRef)
         .catch(() => {});
 

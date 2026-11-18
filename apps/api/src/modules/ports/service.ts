@@ -2,10 +2,10 @@ import { newId } from "@spaces/shared/errors";
 import { config } from "../../config.ts";
 import { now, store } from "../../db.ts";
 import { ServiceError } from "../../errors.ts";
-import { driver } from "../driver/service.ts";
 import { mintTransferToken } from "../files/sign.ts";
-import { allocateHostPort } from "../sandboxes/host-ports.ts";
+import { allocateHostPort, bindOf, portRangeOf } from "../sandboxes/host-ports.ts";
 import { requireLiveSandbox, requireSandbox } from "../sandboxes/service.ts";
+import { driverOfSandbox, requireRuntime } from "../runtimes/service.ts";
 import type { HostedPort } from "./types.ts";
 
 /** Path prefix a preview token is bound to: `/preview/<guestPort>`. */
@@ -23,16 +23,20 @@ export async function hostSandboxPort(
   request: { port: number; public?: boolean; localhost?: boolean; title?: string },
   origin: string,
 ): Promise<HostedPort> {
-  await requireLiveSandbox(id);
+  const { sandbox, driver } = await requireLiveSandbox(id);
+  const runtime = await requireRuntime(sandbox.runtimeId);
+  const range = portRangeOf(runtime);
 
-  if (!config.portRange.start) {
+  if (!range) {
     throw new ServiceError(
       "provider_not_configured",
-      "Port publishing is disabled on this server (SPACES_PORT_RANGE_START=0).",
+      runtime.kind === "local"
+        ? "Port publishing is disabled on this server (SPACES_PORT_RANGE_START=0)."
+        : `Port publishing is disabled on runtime ${runtime.name} (no port range advertised).`,
     );
   }
 
-  const sandbox = (await store.get(id))!;
+  const bind = bindOf(runtime);
   const archived = sandbox.state === "archived";
   let restarted = false;
 
@@ -47,12 +51,12 @@ export async function hostSandboxPort(
       );
     }
 
-    const hostPort = await allocateHostPort();
+    const hostPort = await allocateHostPort(runtime);
 
     if (hostPort === null) {
       throw new ServiceError(
         "provider_not_configured",
-        `No free host port in ${config.portRange.start}-${config.portRange.end}.`,
+        `No free host port in ${range.start}-${range.end} on runtime ${runtime.name}.`,
       );
     }
 
@@ -60,11 +64,7 @@ export async function hostSandboxPort(
       // A port outside SPACES_PREPUBLISH_PORTS is not mapped yet, and msb can
       // only add it by restarting the microVM. Disclose that rather than
       // restarting silently.
-      await driver().publishPort(
-        id,
-        { bind: config.portBind, hostPort, guestPort: request.port },
-        "restart",
-      );
+      await driver.publishPort(id, { bind, hostPort, guestPort: request.port }, "restart");
       restarted = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -75,7 +75,7 @@ export async function hostSandboxPort(
       sandboxId: id,
       guestPort: request.port,
       hostPort,
-      bind: config.portBind,
+      bind,
       title: request.title ?? null,
       public: request.public ?? false,
       localhost: request.localhost ?? false,
@@ -127,9 +127,11 @@ export async function unhostSandboxPort(id: string, guestPort: number) {
 
   if (!row) throw new ServiceError("not_found", `port ${guestPort} is not published`);
 
-  await driver()
+  const driver = await driverOfSandbox(id);
+  await driver
     .unpublishPort(id, { hostPort: row.hostPort, guestPort: row.guestPort })
     .catch(() => {});
+  await driver.forgetPort(row.hostPort).catch(() => {});
   await store.deletePort(row.id);
   return { port: guestPort, hostPort: row.hostPort, status: "unhosted" as const };
 }

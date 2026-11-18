@@ -202,6 +202,72 @@ Creating from a saved snapshot is a restore, not a fork: the driver boots `msb r
 sandbox with the requested size and ports, on the snapshot's disk (decision 0038). `restoreTemporary`
 stays separate and throwaway, for browsing snapshot files (0018).
 
+## Runtimes and the agent
+
+The control plane reaches every machine through `driverFor(runtimeId)` (`modules/driver/service.ts`).
+For `local` that is the embedded driver; for anything else it is a `remoteDriver`
+(`modules/driver/remote.ts`), which turns each `SandboxDriver` method into a `call` frame on the
+agent's WebSocket. The method names are listed once in `@spaces/shared/runtime` and a compile-time
+check in `remote.ts` fails if the interface and the list drift.
+
+```
+service ──driverFor(runtime)──▶ RemoteDriver ──call {id, method, args}──▶ agent ──▶ MicrosandboxDriver
+                                     ▲                                         │
+                                     └──result {id, ok, value | error}─────────┘
+```
+
+- **Frames** are JSON; bytes are `{"$b64": …}` (`encodeFrame`/`decodeFrame`). The agent answers
+  `result` with the error's class kept (`DriverFailure`, `DriverUnsupported`) so the error envelope
+  does not depend on where the driver ran.
+- **One streamed call.** `proxyHttp` answers `result` with the status and headers, then `chunk`
+  frames and `end` (or `abort`). A client that hangs up cancels the `ReadableStream`, which sends a
+  `cancel` frame; the agent cancels the upstream reader.
+- **Connection state** lives in `modules/runtimes/connections.ts` (no store access), the handshake and
+  teardown in `session.ts`, scheduling and the registry in `service.ts`. `AgentConnection.close` is the
+  one exit: it fails pending calls, errors open streams, then runs `onClosed`, which unregisters,
+  detaches the driver and marks the runtime offline. A reconnect with the same token replaces the old
+  connection; the old one's teardown sees it is no longer current and writes nothing.
+- **Liveness.** The agent heartbeats every 5 s (`HEARTBEAT_MS`); `sweepLiveness` closes any connection
+  silent for three intervals. The heartbeat also writes `last_seen_at` and heals a state a reordered
+  teardown left at `offline`.
+- **Placement** (`placement.ts`, `pickRuntime`). `runtimeLoad` sums, per runtime, the active
+  sandboxes' `machine_sizes` rows (a left join on `type`, so a retired size still counts). A size
+  fits when it is within `capacity - committed` on both vCPU and memory, with capacity scaled by
+  `SPACES_RUNTIME_OVERCOMMIT`. Ranking is the fuller of the two fractions after placement; runtimes
+  with no reported capacity sort after every measured one. The same check guards resume
+  (`assertRoom`). `detectResources` measures a local microsandbox host (`os.cpus`, `os.totalmem`
+  less the reserve) and reports nothing for the mock driver or an SSH host.
+- **Port allocation** asks the runtime's driver (`listeningPorts`, `isPortFree`) over the same wire,
+  against that runtime's advertised range; `sandbox_ports` rows are per runtime through their sandbox.
+- **Testing.** `src/testing/control-plane.ts` serves the real app on an ephemeral port and starts real
+  agents (the mock driver, or `FixtureDriver` for bytes and streamed bodies) that connect over a real
+  WebSocket, so the protocol, reconnection, cancellation and scheduling are exercised end to end
+  without a hypervisor.
+
+## Installing a runtime
+
+`install.sh` (repository root) and `apps/cli` ([decision 0043](decision/0043-install-a-runtime-with-one-command.md)).
+
+- **`install.sh`** is bash and does what must happen before there is a program: it checks `curl` and
+  `tar`, installs Bun and `msb` when asked to, fetches the source archive into `~/.spaces/src.new`,
+  swaps it in by rename (so a failed download changes nothing and a running service is never
+  half-replaced), runs `bun install`, writes the `spaces` launcher and `exec`s `spaces install` with
+  every argument it was given. With no arguments and a `runtime.env` present it implies `--runtime`,
+  which is how re-running updates.
+- **`spaces install --runtime`** runs its checks in an order where a failure writes nothing: token
+  format, `msb doctor`, `GET /health`, then `GET /runtime/connect` with the token (`401` means it is
+  not known). Only then does it write `runtime.env` (0600), install the service and read the agent's
+  log from the offset it had before, so an old "connected" line cannot pass for a new one.
+- **The service runs `spaces runtime run`**, not the agent directly: that loads `runtime.env` into the
+  environment (what is already set wins) and imports `apps/api/src/agent.ts`, so launchd, which has no
+  env file, and systemd behave the same. Both log to `~/.spaces/logs/runtime.log`, and neither kills
+  sandboxes when the service restarts (`KillMode=process`, `AbandonProcessGroup`).
+- **Testing.** The CLI takes its dependencies (`InstallDeps`) as an argument, so the install flow is
+  tested against fakes, including that a failed check leaves no file and no service. `install.sh` is
+  tested as a process against a fake machine (stub `bun` and `msb` on the PATH, a local archive through
+  `SPACES_SOURCE_URL`). `apps/api/src/modules/runtime-agent/cli.test.ts` runs `spaces runtime run` as a
+  real subprocess against a real control plane. What is not tested is a real `launchctl` or `systemctl`.
+
 ## Storage and validation
 
 Drizzle ORM over Postgres, through Bun's built-in `SQL` client (`drizzle-orm/bun-sql`). Migrations

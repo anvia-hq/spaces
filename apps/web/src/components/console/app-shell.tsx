@@ -1,6 +1,16 @@
 import { useState, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Archive, Boxes, KeyRound, LogOut, Menu, ScrollText, Users } from "lucide-react";
+import {
+  Activity,
+  Archive,
+  Boxes,
+  KeyRound,
+  LogOut,
+  Menu,
+  ScrollText,
+  Server,
+  Users,
+} from "lucide-react";
 import { Mark } from "@/components/console/mark";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -33,6 +43,7 @@ const GROUPS: readonly { label: string; items: readonly NavItem[] }[] = [
         icon: Archive,
         match: (path) => path === "/snapshots",
       },
+      { to: "/runtimes", label: "Runtimes", icon: Server, match: (path) => path === "/runtimes" },
       { to: "/keys", label: "API keys", icon: KeyRound, match: (path) => path === "/keys" },
     ],
   },

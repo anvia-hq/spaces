@@ -7,7 +7,7 @@
  * 127.0.0.1 where it belongs.
  */
 
-import { isLocalHost } from "../driver/ssh.ts";
+import { isLocalHost } from "./ssh.ts";
 
 interface Tunnel {
   localPort: number;

@@ -36,6 +36,14 @@
         "typescript": "^5.9.3",
       },
     },
+    "apps/cli": {
+      "name": "@spaces/cli",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.3",
+      },
+    },
     "apps/web": {
       "name": "spaces",
       "dependencies": {
@@ -405,6 +413,8 @@
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.68.3", "", { "os": "win32", "cpu": "x64" }, "sha512-ADb1Uz2MNM0sxVpAlMNdQG16Hw4sgW1aqVL7NeqBMpcZeiHb192d7W6shZdMQs33D+w9ihDYBBPsYqqc4MlD8w=="],
 
     "@spaces/api": ["@spaces/api@workspace:apps/api"],
+
+    "@spaces/cli": ["@spaces/cli@workspace:apps/cli"],
 
     "@spaces/db": ["@spaces/db@workspace:packages/db"],
 

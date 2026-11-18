@@ -7,7 +7,8 @@
   "exports": {
     "./sandbox": "./src/sandbox.ts",
     "./files": "./src/files.ts",
-    "./errors": "./src/errors.ts"
+    "./errors": "./src/errors.ts",
+    "./runtime": "./src/runtime.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

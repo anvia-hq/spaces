@@ -1,16 +1,26 @@
 import { config } from "../../config.ts";
 import { ServiceError } from "../../errors.ts";
-import { driver } from "../driver/service.ts";
 import { isLocalHost } from "../driver/ssh.ts";
 import { hostSandboxPort } from "../ports/service.ts";
+import { requireRuntime } from "../runtimes/service.ts";
 import { requireLiveSandbox } from "../sandboxes/service.ts";
+import { bindOf } from "../sandboxes/host-ports.ts";
+import type { RuntimeRow } from "../../db.ts";
 
-function sshHostOf(remote: boolean, origin: string): string {
+function runtimeHost(runtime: RuntimeRow): string | null {
+  if (runtime.kind === "agent") return runtime.publicHost;
+
+  return isLocalHost(config.msbHost) ? null : config.msbHost;
+}
+
+function sshHostOf(runtime: RuntimeRow, origin: string): string {
+  const host = runtimeHost(runtime);
+
+  if (runtime.kind === "agent" && host) return host;
+
   if (config.previewHost) return config.previewHost.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
-  if (remote) return config.msbHost;
-
-  return new URL(origin).hostname;
+  return host ?? new URL(origin).hostname;
 }
 
 const SSH_PUBLIC_KEY =
@@ -25,7 +35,8 @@ const SSH_PUBLIC_KEY =
  * mapping restarts the microVM and would kill the daemon it just launched.
  */
 export async function configureSandboxSsh(id: string, publicKey: string, origin: string) {
-  const { ref } = await requireLiveSandbox(id);
+  const { sandbox, ref, driver } = await requireLiveSandbox(id);
+  const runtime = await requireRuntime(sandbox.runtimeId);
   const key = publicKey.trim().replace(/\r/g, "");
 
   if (/PRIVATE KEY/.test(key)) {
@@ -46,7 +57,7 @@ export async function configureSandboxSsh(id: string, publicKey: string, origin:
   const hosted = await hostSandboxPort(id, { port: 22 }, origin);
 
   // 2. Install sshd and authorize the key (disk changes, so a restart is safe).
-  const setup = await driver().exec(ref, {
+  const setup = await driver.exec(ref, {
     runAs: "root",
     command: [
       "set -e",
@@ -78,7 +89,7 @@ export async function configureSandboxSsh(id: string, publicKey: string, origin:
   }
 
   // 3. Start sshd detached (a plain background job would block the exec).
-  const start = await driver().exec(ref, {
+  const start = await driver.exec(ref, {
     runAs: "root",
     command: [
       "set -e",
@@ -105,17 +116,14 @@ export async function configureSandboxSsh(id: string, publicKey: string, origin:
       .find((line) => line.startsWith("ssh-"))
       ?.trim() ?? "";
 
-  // The client reaches the published port on the host that runs msb, which is
-  // not this machine when SPACES_MSB_HOST points elsewhere. Either way, a port
-  // bound to loopback is reachable only from the host itself — including when
-  // the control plane and the runner are the same machine, because the caller
-  // is still somewhere else (a browser behind `tailscale serve`).
-  const remote = !isLocalHost(config.msbHost);
-  const host = sshHostOf(remote, origin);
+  const published = runtimeHost(runtime);
+  const host = sshHostOf(runtime, origin);
+  const loopbackOnly = /^(127\.|localhost$|::1$)/.test(bindOf(runtime));
+  const forwardTarget = published ?? new URL(origin).hostname;
+  let where = "this host's";
 
-  // Exposure is governed by what the port binds, not by where msb runs.
-  const loopbackOnly = /^(127\.|localhost$|::1$)/.test(config.portBind);
-  const forwardTarget = remote ? config.msbHost : new URL(origin).hostname;
+  if (runtime.kind === "agent") where = `runtime ${runtime.name}'s`;
+  else if (published) where = `${published}'s`;
 
   const answer: {
     machineIp: string | null;
@@ -132,14 +140,25 @@ export async function configureSandboxSsh(id: string, publicKey: string, origin:
     restartRequired: hosted.restartRequired,
   };
 
-  if (loopbackOnly) {
-    answer.note =
-      `Port ${hosted.hostPort} is published on ` +
-      `${remote ? `${config.msbHost}'s` : "this host's"} loopback only, so it is ` +
-      "reachable from that machine rather than over the network. Forward it " +
-      `yourself: ssh -N -L ${hosted.hostPort}:127.0.0.1:${hosted.hostPort} ` +
-      `${forwardTarget}, or set SPACES_PORT_BIND=0.0.0.0 there to connect directly.`;
+  const notes: string[] = [];
+
+  if (runtime.kind === "agent" && !runtime.publicHost) {
+    notes.push(
+      `Runtime ${runtime.name} advertised no public host (SPACES_RUNTIME_PUBLIC_HOST), so the ` +
+        "endpoint names this API's host, which is probably not the machine that holds the port.",
+    );
   }
+
+  if (loopbackOnly) {
+    notes.push(
+      `Port ${hosted.hostPort} is published on ${where} loopback only, so it is ` +
+        "reachable from that machine rather than over the network. Forward it " +
+        `yourself: ssh -N -L ${hosted.hostPort}:127.0.0.1:${hosted.hostPort} ` +
+        `${forwardTarget}, or set SPACES_PORT_BIND=0.0.0.0 there to connect directly.`,
+    );
+  }
+
+  if (notes.length > 0) answer.note = notes.join(" ");
 
   return answer;
 }

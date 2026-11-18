@@ -26,6 +26,9 @@ import {
   type CommandRow,
   type EventRow,
   type MachineSizeRow,
+  runtimes,
+  type RuntimeRow,
+  notInArray,
   type SandboxPortRow,
   type SandboxRow,
   type SavedSnapshotRow,
@@ -37,6 +40,8 @@ import {
   type SQL,
 } from "@spaces/db";
 import type { Sandbox, SandboxState, SandboxType } from "@spaces/shared/sandbox";
+import { LOCAL_RUNTIME_ID } from "@spaces/shared/runtime";
+import type { RuntimeLoad } from "./modules/runtimes/types.ts";
 import { config } from "./config.ts";
 import { canSee, currentOwnerId, scopedOwner } from "./scope.ts";
 import { tracedStore } from "./modules/traces/proxies.ts";
@@ -49,7 +54,7 @@ export const db = handle.db;
 /** Migrations run once, before the first request can reach the store. */
 await handle.migrate();
 
-export type { CommandRow, SandboxRow, SnapshotRow };
+export type { CommandRow, RuntimeRow, SandboxRow, SnapshotRow };
 
 export const now = () => new Date().toISOString();
 
@@ -93,8 +98,20 @@ function toSandbox(row: SandboxRow): Sandbox {
     snapshotCompletedAt: iso(row.snapshotAt),
     hydrated: row.hydrated,
     hydratedAt: iso(row.hydratedAt),
+    runtimeId: row.runtimeId,
   };
 }
+
+const ACTIVE_STATES: SandboxState[] = [
+  "init",
+  "provisioning",
+  "provisioned",
+  "cloning",
+  "ready",
+  "idle",
+  "running",
+  "archiving",
+];
 
 const rawStore = {
   async list(filter: ListFilter = {}): Promise<Sandbox[]> {
@@ -146,6 +163,7 @@ const rawStore = {
     ttlSeconds: number | null;
     archiveAfter: string | null;
     forkOf?: string | null;
+    runtimeId?: string;
   }) {
     const ts = now();
     await db.insert(sandboxes).values({
@@ -158,6 +176,7 @@ const rawStore = {
       ttlSeconds: s.ttlSeconds,
       archiveAfter: at(s.archiveAfter),
       forkOf: s.forkOf ?? null,
+      runtimeId: s.runtimeId ?? LOCAL_RUNTIME_ID,
       ownerId: currentOwnerId(),
       createdAt: at(ts)!,
       updatedAt: at(ts)!,
@@ -335,6 +354,7 @@ const rawStore = {
     state: "creating" | "ready" | "error";
     sizeBytes?: number | null;
     driverRef?: string | null;
+    runtimeId?: string;
   }) {
     await db.insert(snapshots).values({
       id: s.id,
@@ -344,6 +364,7 @@ const rawStore = {
       createdAt: at(now())!,
       sizeBytes: s.sizeBytes ?? null,
       driverRef: s.driverRef ?? null,
+      runtimeId: s.runtimeId ?? LOCAL_RUNTIME_ID,
       ownerId: currentOwnerId(),
     });
   },
@@ -481,9 +502,190 @@ const rawStore = {
     return db.select().from(sandboxPorts).where(eq(sandboxPorts.sandboxId, sandboxId));
   },
 
-  async allHostPorts(): Promise<number[]> {
-    const rows = await db.select({ hostPort: sandboxPorts.hostPort }).from(sandboxPorts);
+  async allHostPorts(runtimeId: string): Promise<number[]> {
+    const rows = await db
+      .select({ hostPort: sandboxPorts.hostPort })
+      .from(sandboxPorts)
+      .innerJoin(sandboxes, eq(sandboxes.id, sandboxPorts.sandboxId))
+      .where(eq(sandboxes.runtimeId, runtimeId));
     return rows.map((r) => r.hostPort);
+  },
+
+  async runtimeIdOf(sandboxId: string): Promise<string | null> {
+    const row = await one(
+      db
+        .select({ runtimeId: sandboxes.runtimeId })
+        .from(sandboxes)
+        .where(eq(sandboxes.id, sandboxId)),
+    );
+    return row?.runtimeId ?? null;
+  },
+
+  async runtimeIdOfSnapshot(snapshotId: string): Promise<string | null> {
+    const row = await one(
+      db
+        .select({ runtimeId: snapshots.runtimeId })
+        .from(snapshots)
+        .where(eq(snapshots.id, snapshotId)),
+    );
+    return row?.runtimeId ?? null;
+  },
+
+  /* ------------------------------------------------------------- runtimes */
+
+  async listRuntimes(): Promise<RuntimeRow[]> {
+    return db.select().from(runtimes).orderBy(asc(runtimes.name));
+  },
+
+  async getRuntime(id: string): Promise<RuntimeRow | null> {
+    return one(db.select().from(runtimes).where(eq(runtimes.id, id)));
+  },
+
+  async runtimeByName(name: string): Promise<RuntimeRow | null> {
+    return one(db.select().from(runtimes).where(eq(runtimes.name, name)));
+  },
+
+  async runtimeByTokenHash(tokenHash: string): Promise<RuntimeRow | null> {
+    return one(db.select().from(runtimes).where(eq(runtimes.tokenHash, tokenHash)));
+  },
+
+  async insertRuntime(r: {
+    id: string;
+    name: string;
+    kind: "local" | "agent";
+    state?: "online" | "offline";
+    labels?: Record<string, string>;
+    maxSandboxes?: number | null;
+    tokenHash?: string | null;
+    tokenPrefix?: string | null;
+    driverKind?: string | null;
+    capabilities?: RuntimeRow["capabilities"];
+    vcpu?: number | null;
+    memMib?: number | null;
+    portStart?: number | null;
+    portEnd?: number | null;
+    portBind?: string | null;
+    publicHost?: string | null;
+  }) {
+    const ts = at(now())!;
+    await db
+      .insert(runtimes)
+      .values({
+        id: r.id,
+        name: r.name,
+        kind: r.kind,
+        state: r.state ?? "offline",
+        labels: r.labels ?? {},
+        maxSandboxes: r.maxSandboxes ?? null,
+        tokenHash: r.tokenHash ?? null,
+        tokenPrefix: r.tokenPrefix ?? null,
+        driverKind: r.driverKind ?? null,
+        capabilities: r.capabilities ?? null,
+        vcpu: r.vcpu ?? null,
+        memMib: r.memMib ?? null,
+        portStart: r.portStart ?? null,
+        portEnd: r.portEnd ?? null,
+        portBind: r.portBind ?? null,
+        publicHost: r.publicHost ?? null,
+        createdAt: ts,
+        updatedAt: ts,
+      })
+      .onConflictDoNothing({ target: runtimes.id });
+  },
+
+  async updateRuntime(
+    id: string,
+    patch: Partial<{
+      name: string;
+      state: "online" | "offline";
+      draining: boolean;
+      labels: Record<string, string>;
+      maxSandboxes: number | null;
+      tokenHash: string | null;
+      tokenPrefix: string | null;
+      driverKind: string | null;
+      capabilities: RuntimeRow["capabilities"];
+      vcpu: number | null;
+      memMib: number | null;
+      portStart: number | null;
+      portEnd: number | null;
+      portBind: string | null;
+      publicHost: string | null;
+      agentVersion: string | null;
+      protocol: number | null;
+      connectedAt: string | null;
+      lastSeenAt: string | null;
+    }>,
+  ) {
+    const { connectedAt, lastSeenAt, ...rest } = patch;
+    const values: Partial<typeof runtimes.$inferInsert> = { ...rest, updatedAt: at(now())! };
+
+    if (connectedAt !== undefined) values.connectedAt = at(connectedAt);
+
+    if (lastSeenAt !== undefined) values.lastSeenAt = at(lastSeenAt);
+
+    await db.update(runtimes).set(values).where(eq(runtimes.id, id));
+  },
+
+  async deleteRuntime(id: string) {
+    await db.delete(runtimes).where(eq(runtimes.id, id));
+  },
+
+  async markRuntimesOffline(except: string[]) {
+    const where = except.length
+      ? and(
+          eq(runtimes.kind, "agent"),
+          eq(runtimes.state, "online"),
+          notInArray(runtimes.id, except),
+        )
+      : and(eq(runtimes.kind, "agent"), eq(runtimes.state, "online"));
+    await db
+      .update(runtimes)
+      .set({ state: "offline", updatedAt: at(now())! })
+      .where(where);
+  },
+
+  async runtimeLoad(): Promise<Map<string, RuntimeLoad>> {
+    const load = new Map<string, RuntimeLoad>();
+    const entry = (id: string) => {
+      let value = load.get(id);
+
+      if (!value) {
+        value = { active: 0, total: 0, snapshots: 0, vcpu: 0, memMib: 0 };
+        load.set(id, value);
+      }
+
+      return value;
+    };
+    const live = inArray(sandboxes.state, ACTIVE_STATES);
+    const sandboxRows = await db
+      .select({
+        runtimeId: sandboxes.runtimeId,
+        active: sql<number>`count(*) filter (where ${live})::int`,
+        total: sql<number>`count(*)::int`,
+        vcpu: sql<number>`coalesce(sum(${machineSizes.vcpu}) filter (where ${live}), 0)::int`,
+        memMib: sql<number>`coalesce(sum(${machineSizes.memMib}) filter (where ${live}), 0)::int`,
+      })
+      .from(sandboxes)
+      .leftJoin(machineSizes, eq(machineSizes.name, sandboxes.type))
+      .groupBy(sandboxes.runtimeId);
+
+    for (const row of sandboxRows) {
+      const value = entry(row.runtimeId);
+      value.active = Number(row.active);
+      value.total = Number(row.total);
+      value.vcpu = Number(row.vcpu);
+      value.memMib = Number(row.memMib);
+    }
+
+    const snapshotRows = await db
+      .select({ runtimeId: snapshots.runtimeId, n: sql<number>`count(*)::int` })
+      .from(snapshots)
+      .groupBy(snapshots.runtimeId);
+
+    for (const row of snapshotRows) entry(row.runtimeId).snapshots = Number(row.n);
+
+    return load;
   },
 
   async updatePort(

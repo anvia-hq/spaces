@@ -4,7 +4,7 @@ import { iso, store } from "../../db.ts";
 import type { SnapshotShareRow } from "../../db.ts";
 import { ServiceError } from "../../errors.ts";
 import { currentOwnerId } from "../../scope.ts";
-import { driver } from "../driver/service.ts";
+import { driverFor } from "../driver/service.ts";
 import { requireSandbox } from "../sandboxes/service.ts";
 import { snapshotSandbox } from "./service.ts";
 
@@ -96,6 +96,7 @@ export async function saveNamedSnapshot(sandboxId: string, name: string) {
   }
 
   const sandbox = await requireSandbox(sandboxId);
+  driverFor(sandbox.runtimeId);
   const existing = await store.getSavedSnapshot(name);
 
   // A replace has to release the previous artifact.
@@ -104,7 +105,7 @@ export async function saveNamedSnapshot(sandboxId: string, name: string) {
     const previous = await store.getSnapshot(existing.snapshotId);
 
     if (previous?.driverRef) {
-      await driver()
+      await driverFor(previous.runtimeId)
         .destroySnapshot(previous.driverRef)
         .catch(() => {});
     }
@@ -155,7 +156,7 @@ export async function deleteSavedSnapshot(name: string) {
     const snapshot = await store.getSnapshot(row.snapshotId);
 
     if (snapshot?.driverRef) {
-      await driver()
+      await driverFor(snapshot.runtimeId)
         .destroySnapshot(snapshot.driverRef)
         .catch(() => {});
     }

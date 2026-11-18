@@ -6,6 +6,8 @@ import type {
   ExecRequest,
   ExecResult,
   MachineSpec,
+  ProxyRequest,
+  ProxyResponse,
   SandboxDriver,
 } from "./types.ts";
 
@@ -26,6 +28,8 @@ export class MockDriver implements SandboxDriver {
   private live = new Map<string, { size: MachineSpec; bootedAt: number }>();
 
   private snapshots = new Set<string>();
+
+  private published = new Map<number, { sandboxId: string; guestPort: number }>();
 
   private async jitter(ms = 120) {
     await Bun.sleep(ms + Math.random() * ms);
@@ -76,6 +80,10 @@ export class MockDriver implements SandboxDriver {
   async destroy(sandboxId: string): Promise<void> {
     await this.jitter(40);
     this.live.delete(sandboxId);
+
+    for (const [hostPort, target] of this.published) {
+      if (target.sandboxId === sandboxId) this.published.delete(hostPort);
+    }
   }
 
   async snapshot(_sandboxId: string, snapshotId: string) {
@@ -141,14 +149,40 @@ export class MockDriver implements SandboxDriver {
     return null;
   }
   async publishPort(
-    _sandboxId: string,
-    _mapping: { bind: string; hostPort: number; guestPort: number },
+    sandboxId: string,
+    mapping: { bind: string; hostPort: number; guestPort: number },
     _mode?: "restart" | "next-start",
   ): Promise<void> {
-    return this.filesUnsupported();
+    this.published.set(mapping.hostPort, { sandboxId, guestPort: mapping.guestPort });
   }
-  async unpublishPort(): Promise<void> {
-    return this.filesUnsupported();
+  async unpublishPort(
+    _sandboxId: string,
+    mapping: { hostPort: number; guestPort: number },
+  ): Promise<void> {
+    this.published.delete(mapping.hostPort);
+  }
+  async listeningPorts(): Promise<number[] | null> {
+    return [...this.published.keys()];
+  }
+  async isPortFree(port: number): Promise<boolean> {
+    return !this.published.has(port);
+  }
+  async forgetPort(hostPort: number): Promise<void> {
+    this.published.delete(hostPort);
+  }
+  async proxyHttp(request: ProxyRequest): Promise<ProxyResponse> {
+    const target = this.published.get(request.hostPort);
+
+    if (!target) throw new DriverFailure(`mock: nothing published on ${request.hostPort}`);
+
+    const text = `mock ${target.sandboxId}:${target.guestPort} ${request.method} ${request.path}`;
+    const body = new Blob([new TextEncoder().encode(text)]).stream();
+    return {
+      status: 200,
+      statusText: "OK",
+      headers: [["content-type", "text/plain"]],
+      body: body as ReadableStream<Uint8Array>,
+    };
   }
   async restoreTemporary(): Promise<{ ref: string }> {
     return this.filesUnsupported();
@@ -210,16 +244,16 @@ export class MockDriver implements SandboxDriver {
     );
   }
 
-  async readFile(): Promise<Uint8Array> {
+  async readFile(_ref: string, _path: string): Promise<Uint8Array> {
     return this.filesUnsupported();
   }
-  async writeFile(): Promise<void> {
+  async writeFile(_ref: string, _path: string, _bytes: Uint8Array): Promise<void> {
     this.filesUnsupported();
   }
   async listFiles(): Promise<FileEntry[]> {
     return this.filesUnsupported();
   }
-  async fileInfo(): Promise<FileEntry> {
+  async fileInfo(_ref: string, _path: string): Promise<FileEntry> {
     return this.filesUnsupported();
   }
   async makeFolder(): Promise<void> {

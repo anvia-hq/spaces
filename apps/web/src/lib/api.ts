@@ -1,3 +1,4 @@
+import type { Runtime } from "@spaces/shared/runtime";
 import type { MachineSize, Sandbox, SandboxState, SandboxType } from "@spaces/shared/sandbox";
 
 const BASE = "/api/v1";
@@ -224,6 +225,7 @@ export const api = {
     type: SandboxType;
     ttlSeconds: number | null;
     name?: string;
+    runtime?: string;
     labels?: Record<string, string>;
   }) =>
     request<{ sandbox: Sandbox }>("/sandboxes", {
@@ -517,6 +519,30 @@ export const api = {
   revokeApiKey: (id: string) =>
     request<{ id: string; status: "revoked" }>(`/api-keys/${id}`, { method: "DELETE" }),
 
+  /* -------------------------------------------------------------- runtimes */
+
+  listRuntimes: () => request<{ runtimes: Runtime[] }>("/runtimes"),
+
+  createRuntime: (input: { name: string; maxSandboxes?: number | null }) =>
+    request<CreatedRuntime>("/runtimes", { method: "POST", body: JSON.stringify(input) }),
+
+  updateRuntime: (
+    runtime: string,
+    patch: { name?: string; maxSandboxes?: number | null; draining?: boolean },
+  ) =>
+    request<{ runtime: Runtime }>(`/runtimes/${encodeURIComponent(runtime)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
+  rotateRuntimeToken: (runtime: string) =>
+    request<CreatedRuntime>(`/runtimes/${encodeURIComponent(runtime)}/token`, { method: "POST" }),
+
+  deleteRuntime: (runtime: string) =>
+    request<{ id: string; name: string }>(`/runtimes/${encodeURIComponent(runtime)}`, {
+      method: "DELETE",
+    }),
+
   /* --------------------------------------------------------------- members */
 
   listUsers: (query: { search?: string; limit?: number; offset?: number } = {}) => {
@@ -806,6 +832,13 @@ export interface ManagedUser {
   admin: boolean;
   banned: boolean;
   createdAt: string;
+}
+
+export type { Runtime };
+
+export interface CreatedRuntime {
+  runtime: Runtime;
+  token: string;
 }
 
 export interface ApiKeyEntry {

@@ -4,11 +4,17 @@ import type { Context, ValidationTargets } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { errorEnvelope, type ErrorCode } from "@spaces/shared/errors";
+import type { RuntimeRow } from "@spaces/db";
 import type { Principal } from "./modules/auth/types.ts";
 import type { AuditHint } from "./modules/audit/types.ts";
 
 export type ApiEnv = {
-  Variables: { requestId: string; principal: Principal; audit?: AuditHint };
+  Variables: {
+    requestId: string;
+    principal: Principal;
+    audit?: AuditHint;
+    agentRuntime?: RuntimeRow;
+  };
 };
 
 export class ServiceError extends Error {
@@ -48,6 +54,13 @@ export class DriverFailure extends Error {
   ) {
     super(message);
     this.name = "DriverFailure";
+  }
+}
+
+export class RuntimeUnavailable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RuntimeUnavailable";
   }
 }
 
@@ -140,6 +153,10 @@ export function errorHandler(error: Error, c: Context<ApiEnv>) {
 
   if (error instanceof ServiceError) {
     return fail(c, SERVICE_CODES[error.code], error.message);
+  }
+
+  if (error instanceof RuntimeUnavailable) {
+    return fail(c, "runtime_unavailable", error.message);
   }
 
   if (error instanceof DriverUnsupported) {

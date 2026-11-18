@@ -6,7 +6,12 @@ export async function resolveCreateSource(from: string): Promise<CreateSource> {
   const sandbox = await store.raw(from);
 
   if (sandbox?.driverRef) {
-    return { kind: "sandbox", id: sandbox.id, driverRef: sandbox.driverRef };
+    return {
+      kind: "sandbox",
+      id: sandbox.id,
+      driverRef: sandbox.driverRef,
+      runtimeId: sandbox.runtimeId,
+    };
   }
 
   if (from.startsWith("bsh_")) {
@@ -63,5 +68,10 @@ export async function resolveCreateSource(from: string): Promise<CreateSource> {
     );
   }
 
-  return { kind: "snapshot", name: saved.name, driverRef: artifact.driverRef };
+  return {
+    kind: "snapshot",
+    name: saved.name,
+    driverRef: artifact.driverRef,
+    runtimeId: artifact.runtimeId,
+  };
 }
