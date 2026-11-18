@@ -5,7 +5,7 @@
 
 ## Context
 
-A machine size has `diskGb` (51 for `small` and `default`, 111 for `large`, 251 for `xlarge`), but the driver passed `msb create` only the CPU count and memory. Every sandbox got msb's default 4 GiB root disk. An Aven project's saved environment (installed dependencies and browsers) took 3.5 GiB of it, so every thread started from that snapshot had about 370 MB free and ran into `ENOSPC` within minutes, which surfaced in Aven as "Durable storage failed … cannot rollback".
+A machine size has `diskGb` (51 for `small` and `default`, 111 for `large`, 251 for `xlarge`), but the driver passed `msb create` only the CPU count and memory. Every sandbox got msb's default 4 GiB root disk. A warm saved environment (installed dependencies and browsers) took 3.5 GiB of it, so every thread started from that snapshot had about 370 MB free and ran into `ENOSPC` within minutes, which surfaced in the client as "Durable storage failed … cannot rollback".
 
 ## Decision
 

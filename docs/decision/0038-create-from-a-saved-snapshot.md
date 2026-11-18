@@ -5,8 +5,8 @@
 
 ## Context
 
-`POST /sandboxes` has always accepted `from`, and it already forks a live sandbox's disk. Aven needs
-more than a fork: it runs `.aven/setup` once, saves the resulting environment under a name, and starts
+`POST /sandboxes` has always accepted `from`, and it already forks a live sandbox's disk. A client needs
+more than a fork: it runs a setup script once, saves the resulting environment under a name, and starts
 later sandboxes from it. Saved snapshots already point at a snapshot artifact (`snapshotId`), and that
 artifact already carries the driver's disk reference (`driverRef`), so the missing piece was resolving
 that pair and booting it.
@@ -14,7 +14,7 @@ that pair and booting it.
 The spec also allows a `bsh_` share code in `from`. Share codes exist, but they are a separate
 capability (0019); this change does not add a deploy path for them.
 
-Aven manages the 72-hour lifetime of its saved snapshots by deleting them through the snapshot routes.
+The client manages the 72-hour lifetime of its saved snapshots by deleting them through the snapshot routes.
 Spaces must not grow a hidden TTL for rows a client is responsible for.
 
 ## Decision
@@ -64,7 +64,7 @@ No schema change is needed: `saved_snapshots.snapshot_id` and `snapshots.driver_
   booted its own disk. Verified on the development host by removing the artifact while the restored
   sandbox answered commands.
 - A caller that forgets to delete its saved snapshots keeps them forever. That is deliberate: lifetime
-  is Aven's policy, not a store side effect.
+  is the caller's policy, not a store side effect.
 - A future driver must implement `restore`; the interface makes that a compile error rather than a
   runtime surprise.
 - Share codes still answer `404` on create. Supporting them would need a decision about who owns the

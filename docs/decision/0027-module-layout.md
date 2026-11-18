@@ -14,7 +14,7 @@ That is fine while there are three screens and forty endpoints. It stops being f
 change touches authentication and API keys: every route, every service function and every screen is a
 needle in the same haystack, and nothing in the tree says which pieces belong together.
 
-The Aven repositories already answer this question. `apps/control-plane` groups by module
+A sibling repository on the same stack already answers this question. It groups by module
 (`router.ts`/`schema.ts`/`service.ts`, typed errors in one file, infra singletons outside), and
 `apps/platform` layers `routes -> components -> hooks` with `src/lib/` and `src/components/` for what
 is not feature code. Reading a change there is a matter of opening one folder.
@@ -46,7 +46,7 @@ removed so callers import `@/lib/*` directly.
 - Adding a screen or an endpoint now starts by creating a folder. The cost is more files and more
   relative imports inside a module; the payoff is that a diff names its area.
 - A few rules were kept deliberately gentle. `lib/api.ts` remains the typed client and keeps the
-  wire response types (Aven's `lib/api.ts` is untyped and each module types its own answers): moving
+  wire response types (that repository's client is untyped and each module types its own answers): moving
   them would invert the layering or duplicate thirty endpoint shapes. `packages/db/src/index.ts`
   survives as a package entry because it owns `createDb`, not because it re-exports.
 - `bun test` from the repo root still bypasses `apps/api/bunfig.toml`; that is pre-existing and now
@@ -60,5 +60,5 @@ removed so callers import `@/lib/*` directly.
   authentication on both sides.
 - **Split only the API.** The console is where the panels sit side by side with shared primitives; a
   one-sided move would have kept the confusion that mattered most.
-- **Adopt Aven's stricter rules too** (Elysia, comments forbidden, `@aven/ui` as a package). That
+- **Adopt its stricter rules too** (Elysia, comments forbidden, a shared UI package). That
   changes behaviour or needs new dependencies, so it is out of scope for a layout change.
