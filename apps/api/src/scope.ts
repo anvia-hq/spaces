@@ -3,16 +3,18 @@ import { AsyncLocalStorage } from "node:async_hooks";
 /**
  * Who a request is acting as, carried for the length of that request only.
  *
- * Reads that return someone else's row are filtered here rather than in fifty
- * route handlers: every sandbox, snapshot and saved snapshot is reached through
- * `store`, so one gate cannot be forgotten. Work that runs outside a request
+ * A deployment is one cluster and a cluster is one team (decision 0044), so
+ * anyone who can sign in sees every row: `ownerId` is stamped on new rows as
+ * attribution, and the visibility gate below answers true for a signed-in
+ * person. The gate stays in one place because a deployment that serves two
+ * teams re-arms it here and nowhere else. Work that runs outside a request
  * (the reaper, provisioning, migrations) has no scope and sees everything.
  */
 export type Scope = {
   /** Better Auth user id, or null for the operator key. */
   ownerId: string | null;
-  /** The operator key sees every row, whoever created it. */
-  admin: boolean;
+  /** Whether reads may return rows somebody else created. */
+  seesEveryRow: boolean;
 };
 
 const storage = new AsyncLocalStorage<Scope>();
@@ -34,7 +36,7 @@ export function currentOwnerId(): string | null {
 export function scopedOwner(): string | null {
   const scope = storage.getStore();
 
-  if (!scope || scope.admin) return null;
+  if (!scope || scope.seesEveryRow) return null;
 
   return scope.ownerId;
 }
@@ -43,18 +45,18 @@ export function scopedOwner(): string | null {
 export function canSee(ownerId: string | null): boolean {
   const scope = storage.getStore();
 
-  if (!scope || scope.admin) return true;
+  if (!scope || scope.seesEveryRow) return true;
 
   return ownerId !== null && ownerId === scope.ownerId;
 }
 
-export const operatorScope: Scope = { ownerId: null, admin: true };
+export const operatorScope: Scope = { ownerId: null, seesEveryRow: true };
 
 /**
- * A signed-in person. An admin sees every row, exactly as the operator key does,
- * and keeps their own id as the owner so new rows are still stamped with them.
- * A key inherits it: the key is that person's credential (decision 0037).
+ * A signed-in person. Being an admin is no longer part of visibility: the admin
+ * role gates operating runtimes and machine sizes (`mayOperate`, decision 0037),
+ * and nothing a read filters on.
  */
-export function userScope(userId: string, admin = false): Scope {
-  return { ownerId: userId, admin };
+export function userScope(userId: string): Scope {
+  return { ownerId: userId, seesEveryRow: true };
 }

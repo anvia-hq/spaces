@@ -66,7 +66,7 @@ export const apiAuth: MiddlewareHandler<ApiEnv> = async (c, next) => {
       role: session.user.role ?? "user",
       admin,
     });
-    return runInScope(userScope(session.user.id, admin), next);
+    return runInScope(userScope(session.user.id), next);
   }
 
   const token = bearerOf(c.req.header("authorization"));
@@ -98,7 +98,7 @@ export const apiAuth: MiddlewareHandler<ApiEnv> = async (c, next) => {
       role: owner.role,
       admin,
     });
-    return runInScope(userScope(owner.id, admin), next);
+    return runInScope(userScope(owner.id), next);
   }
 
   return unauthorized(c, "Missing bearer token. Sign in, or send `Authorization: Bearer <key>`.");

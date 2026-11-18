@@ -412,27 +412,20 @@ describe("creating a sandbox from a saved snapshot", () => {
     expect(result.stdout).toContain("alive");
   });
 
-  test("another account's saved snapshot is refused", async () => {
+  test("another account's saved snapshot is available to a teammate", async () => {
     const owner = await signUp(`${unique("owner")}@example.com`);
-    const stranger = await signUp(`${unique("stranger")}@example.com`);
+    const teammate = await signUp(`${unique("stranger")}@example.com`);
 
     const sourceId = await readySandbox(owner);
     const name = unique("owned");
     await saveSnapshot(sourceId, name, owner);
 
-    const hidden = await savedSnapshot(name, stranger);
-    expect(hidden.res.status).toBe(404);
+    const shared = await savedSnapshot(name, teammate);
+    expect(shared.res.status).toBe(200);
 
-    const before = await sandboxCount(stranger);
-    const denied = await call("POST", "/api/v1/sandboxes", {
-      json: { from: name },
-      credential: stranger,
-    });
-    expect(denied.status).toBe(404);
-    const body = (await denied.json()) as { code: string; message: string };
-    expect(body.code).toBe("not_found");
-    expect(body.message).toContain("snapshot_not_found");
-    expect(await sandboxCount(stranger)).toBe(before);
+    const cloned = await createSandbox({ from: name }, teammate);
+    expect(cloned.res.status).toBe(202);
+    await waitFor(cloned.id, ["ready"], teammate);
 
     const allowed = await createSandbox({ from: name }, owner);
     expect(allowed.res.status).toBe(202);
