@@ -52,6 +52,7 @@ out. Numbers quoted are measured, not estimated.
 | [0042](./0042-control-plane-and-runtimes.md)                       | A control plane with many runtimes, joined by an outbound agent        | accepted, extends 0007, narrows 0017 |
 | [0043](./0043-install-a-runtime-with-one-command.md)               | A runtime is installed by one command, run on the machine              | accepted, builds on 0042             |
 | [0044](./0044-a-cluster-is-one-team.md)                            | A cluster is one team, and nothing here is held back                   | accepted, narrows 0028               |
+| [0045](./0045-the-operator-console.md)                             | The operator's console: one Cluster page, and history the server keeps | accepted, builds on 0034, 0042, 0044 |
 
 ## Reading order
 
@@ -70,7 +71,8 @@ Changing a specific area? Jump straight to the relevant record:
 | Networking, ports, SSH, remote hosts | 0013, 0014, 0015, 0017, 0022 |
 | Storage, metering, state             | 0006, 0020, 0030             |
 | Machine sizes, capacity, presets     | 0034, 0037                   |
-| The console                          | 0021, 0023, 0026, 0024       |
+| The console                          | 0021, 0023, 0026, 0024, 0039 |
+| The operator's console               | 0045, 0042, 0034, 0037       |
 | Deploying it somewhere               | 0025, 0017, 0022, 0042       |
 | Runtimes, scheduling, the agent      | 0042, 0043, 0007, 0017       |
 | Where a file goes                    | 0027                         |
