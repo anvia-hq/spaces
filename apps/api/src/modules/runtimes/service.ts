@@ -6,10 +6,11 @@ import {
   type AgentHello,
   type CreateRuntimeRequest,
   type Runtime,
+  type RuntimeSample,
   type UpdateRuntimeRequest,
 } from "@spaces/shared/runtime";
 import { config } from "../../config.ts";
-import { iso, now, store, type RuntimeRow } from "../../db.ts";
+import { iso, now, store, type RuntimeRow, type RuntimeSampleRow } from "../../db.ts";
 import { RuntimeUnavailable, ServiceError } from "../../errors.ts";
 import { driverFor, localDriver } from "../driver/service.ts";
 import { detectResources } from "../driver/resources.ts";
@@ -90,10 +91,12 @@ export function shapeRuntime(row: RuntimeRow, load: RuntimeLoad = EMPTY_LOAD): R
     snapshots: load.snapshots,
     resources: row.vcpu && row.memMib ? { vcpu: row.vcpu, memMib: row.memMib } : null,
     committed: { vcpu: load.vcpu, memMib: load.memMib },
+    overcommit: config.runtime.overcommit,
     driver: row.driverKind,
     capabilities: row.capabilities,
     publicHost: row.publicHost,
     agentVersion: row.agentVersion,
+    protocol: row.protocol,
     tokenPrefix: row.tokenPrefix,
     connectedAt: iso(row.connectedAt),
     lastSeenAt: iso(row.lastSeenAt),
@@ -386,4 +389,55 @@ export async function pickRuntime(request: SchedulingRequest = {}): Promise<Runt
       ? "no runtime is registered"
       : `no runtime can take a new sandbox (${reasons.join("; ")})`,
   );
+}
+
+/**
+ * One row per online runtime, for the capacity history the Cluster page draws
+ * (decision 0045). Offline machines are skipped: a zero would read as "empty",
+ * and the console already has the state badge for "not there".
+ */
+export async function sampleCluster(): Promise<number> {
+  await ensureLocalRuntime();
+  const [rows, load] = await Promise.all([store.listRuntimes(), store.runtimeLoad()]);
+  const at = new Date();
+  const samples: RuntimeSampleRow[] = [];
+
+  for (const row of rows) {
+    if (row.state !== "online") continue;
+
+    const entry = load.get(row.id) ?? EMPTY_LOAD;
+
+    samples.push({
+      runtimeId: row.id,
+      at,
+      activeSandboxes: entry.active,
+      vcpuCommitted: entry.vcpu,
+      memMibCommitted: entry.memMib,
+      vcpuCapacity: row.vcpu,
+      memMibCapacity: row.memMib,
+    });
+  }
+
+  await store.insertRuntimeSamples(samples);
+
+  return samples.length;
+}
+
+/** The samples of the last `minutes`, oldest first, for the charts. */
+export async function clusterSamples(
+  minutes: number,
+  runtimeId?: string,
+): Promise<RuntimeSample[]> {
+  const since = new Date(Date.now() - minutes * 60_000);
+  const rows = await store.runtimeSamplesSince(since, runtimeId);
+
+  return rows.map((row) => ({
+    runtimeId: row.runtimeId,
+    at: row.at.toISOString(),
+    activeSandboxes: row.activeSandboxes,
+    vcpuCommitted: row.vcpuCommitted,
+    memMibCommitted: row.memMibCommitted,
+    vcpuCapacity: row.vcpuCapacity,
+    memMibCapacity: row.memMibCapacity,
+  }));
 }

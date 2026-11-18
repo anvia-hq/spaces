@@ -1,4 +1,4 @@
-import type { Runtime } from "@spaces/shared/runtime";
+import type { Runtime, RuntimeSample } from "@spaces/shared/runtime";
 import type { MachineSize, Sandbox, SandboxState, SandboxType } from "@spaces/shared/sandbox";
 
 const BASE = "/api/v1";
@@ -522,6 +522,14 @@ export const api = {
   /* -------------------------------------------------------------- runtimes */
 
   listRuntimes: () => request<{ runtimes: Runtime[] }>("/runtimes"),
+
+  runtimeSamples: (minutes: number, runtime?: string) => {
+    const query = new URLSearchParams({ minutes: String(minutes) });
+
+    if (runtime) query.set("runtime", runtime);
+
+    return request<{ samples: RuntimeSample[] }>(`/runtimes/samples?${query}`);
+  },
 
   createRuntime: (input: { name: string; maxSandboxes?: number | null }) =>
     request<CreatedRuntime>("/runtimes", { method: "POST", body: JSON.stringify(input) }),

@@ -96,6 +96,7 @@ embedded in the API process, and any number of agent runtimes can be registered 
 | -------- | --------------------------- | ------------------------------------------------------------------------------- |
 | `GET`    | `/runtimes`                 | Every runtime with its load; any authenticated caller                           |
 | `GET`    | `/runtimes/{runtime}`       | By id (`rt_…`, or `local`) or by name                                           |
+| `GET`    | `/runtimes/samples`         | Capacity history; `?minutes=` (5–10080, default 360), `?runtime=` to narrow     |
 | `POST`   | `/runtimes`                 | Admin only; `{ name, labels?, maxSandboxes? }`; answers `201` with `token` once |
 | `PATCH`  | `/runtimes/{runtime}`       | Admin only; any of `name`, `labels`, `maxSandboxes` (`null` clears), `draining` |
 | `POST`   | `/runtimes/{runtime}/token` | Admin only; new token, and the connected agent is cut off at once               |
@@ -190,6 +191,11 @@ runtime's `publicHost`; SSH itself is not relayed (decision 0042).
 | `POST`   | `/machine-sizes`        | Operator only; `{ name, vcpu, memMib, diskGb, description? }`      |
 | `PATCH`  | `/machine-sizes/{name}` | Operator only; any of `vcpu`, `memMib`, `diskGb`, `description`    |
 | `DELETE` | `/machine-sizes/{name}` | Operator only; retires, does not delete (see below)                |
+
+`default` can be edited like any other preset — it is what a create falls back to, not a fixed
+shape — but it cannot be retired, because every deployment needs a size to fall back to. An edit takes
+effect on the next create, and on the next resume of a sandbox carrying that preset's name; a disk keeps
+the size it was created with, so a larger `diskGb` only reaches new sandboxes.
 
 Any authenticated caller may read the list — the console needs it to render the create dialog.
 Changing it takes the operator key (`SPACES_API_KEY`) **or a signed-in account with the `admin` role**,

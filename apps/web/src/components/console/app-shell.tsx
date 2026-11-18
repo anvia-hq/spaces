@@ -7,6 +7,7 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  Ruler,
   ScrollText,
   Server,
   Users,
@@ -43,7 +44,6 @@ const GROUPS: readonly { label: string; items: readonly NavItem[] }[] = [
         icon: Archive,
         match: (path) => path === "/snapshots",
       },
-      { to: "/runtimes", label: "Runtimes", icon: Server, match: (path) => path === "/runtimes" },
       { to: "/keys", label: "API keys", icon: KeyRound, match: (path) => path === "/keys" },
     ],
   },
@@ -66,6 +66,13 @@ const ADMIN_GROUP: readonly { label: string; items: readonly NavItem[] }[] = [
   {
     label: "Admin",
     items: [
+      { to: "/runtimes", label: "Cluster", icon: Server, match: (path) => path === "/runtimes" },
+      {
+        to: "/machine-sizes",
+        label: "Machine sizes",
+        icon: Ruler,
+        match: (path) => path === "/machine-sizes",
+      },
       { to: "/members", label: "Members", icon: Users, match: (path) => path === "/members" },
     ],
   },

@@ -198,6 +198,56 @@ describe("putting a preset in and taking it out", () => {
     expect(retire.status).toBe(404);
   });
 
+  test("default is editable: its numbers are the operator's to change", async () => {
+    const before = (await sizes()).find((row) => row.name === "default")!;
+    const patched = await call("PATCH", "/api/v1/machine-sizes/default", {
+      token: OPERATOR,
+      json: { vcpu: 6, memMib: 12_288 },
+    });
+    expect(patched.status).toBe(200);
+
+    const after = (await sizes()).find((row) => row.name === "default")!;
+    expect(after.vcpu).toBe(6);
+    expect(after.memMib).toBe(12_288);
+    expect(after.diskGb).toBe(before.diskGb);
+    expect(after.retiredAt).toBeNull();
+
+    const restored = await call("PATCH", "/api/v1/machine-sizes/default", {
+      token: OPERATOR,
+      json: { vcpu: before.vcpu, memMib: before.memMib },
+    });
+    expect(restored.status).toBe(200);
+  });
+
+  test("an edit changes what the next create gets, and what a resume asks for", async () => {
+    const before = (await sizes()).find((row) => row.name === "default")!;
+    await call("PATCH", "/api/v1/machine-sizes/default", {
+      token: OPERATOR,
+      json: { memMib: 5120 },
+    });
+
+    const made = await call("POST", "/api/v1/sandboxes", {
+      token: OPERATOR,
+      json: { ttlSeconds: 60, name: "sized-by-the-table" },
+    });
+    expect(made.status).toBe(202);
+
+    const sandbox = ((await made.json()) as { sandbox: { id: string } }).sandbox;
+    await call("POST", `/api/v1/sandboxes/${sandbox.id}/stop`, { token: OPERATOR });
+
+    const big = await call("POST", `/api/v1/sandboxes/${sandbox.id}/resume`, {
+      token: OPERATOR,
+      json: { type: "xlarge" },
+    });
+    expect(big.status).toBe(202);
+
+    await call("DELETE", `/api/v1/sandboxes/${sandbox.id}`, { token: OPERATOR });
+    await call("PATCH", "/api/v1/machine-sizes/default", {
+      token: OPERATOR,
+      json: { vcpu: before.vcpu, memMib: before.memMib },
+    });
+  });
+
   test("default cannot be retired", async () => {
     const res = await call("DELETE", "/api/v1/machine-sizes/default", { token: OPERATOR });
     const body = (await res.json()) as { code: string; message: string };

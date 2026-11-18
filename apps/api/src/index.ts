@@ -7,6 +7,7 @@ import {
   ensureLocalRuntime,
   isRuntimeReachable,
   resetRuntimeStates,
+  sampleCluster,
 } from "./modules/runtimes/service.ts";
 import { sweepLiveness } from "./modules/runtimes/session.ts";
 import { stopSandbox } from "./modules/sandboxes/service.ts";
@@ -62,22 +63,51 @@ if (promoted.length > 0) {
   console.log(`[api] promoted ${promoted.length} account(s) from SPACES_ADMIN_EMAILS`);
 }
 
-/** Traces fill the table faster than anything else; sweep them on a slow timer. */
+/** Traces and capacity samples fill their tables faster than anything else; sweep on a slow timer. */
 async function sweep() {
-  if (config.traces.retentionDays <= 0) return;
+  if (config.traces.retentionDays > 0) {
+    const cutoff = new Date(Date.now() - config.traces.retentionDays * 86_400_000).toISOString();
 
-  const cutoff = new Date(Date.now() - config.traces.retentionDays * 86_400_000).toISOString();
+    try {
+      const removed = await store.sweepSpans(cutoff);
+
+      if (removed > 0) console.log(`[reaper] swept ${removed} spans older than ${cutoff}`);
+    } catch (error) {
+      console.warn("[reaper] span sweep failed:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (config.samples.retentionDays > 0) {
+    const cutoff = new Date(Date.now() - config.samples.retentionDays * 86_400_000);
+
+    try {
+      const removed = await store.sweepRuntimeSamples(cutoff);
+
+      if (removed > 0)
+        console.log(
+          `[reaper] swept ${removed} capacity samples older than ${cutoff.toISOString()}`,
+        );
+    } catch (error) {
+      console.warn("[reaper] sample sweep failed:", error instanceof Error ? error.message : error);
+    }
+  }
+}
+
+async function sample() {
+  if (config.samples.intervalMs <= 0) return;
 
   try {
-    const removed = await store.sweepSpans(cutoff);
-
-    if (removed > 0) console.log(`[reaper] swept ${removed} spans older than ${cutoff}`);
+    await sampleCluster();
   } catch (error) {
-    console.warn("[reaper] span sweep failed:", error instanceof Error ? error.message : error);
+    console.warn(
+      "[samples] could not record capacity:",
+      error instanceof Error ? error.message : error,
+    );
   }
 }
 
 setInterval(() => void sweep(), 10 * 60_000);
+setInterval(() => void sample(), config.samples.intervalMs);
 
 await resetRuntimeStates();
 await ensureLocalRuntime();

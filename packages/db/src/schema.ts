@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
@@ -55,6 +56,23 @@ export const runtimes = pgTable(
     updatedAt: createdAt("updated_at").notNull(),
   },
   (table) => [index("runtimes_token_idx").on(table.tokenHash)],
+);
+
+export const runtimeSamples = pgTable(
+  "runtime_samples",
+  {
+    runtimeId: text("runtime_id").notNull(),
+    at: createdAt("at").notNull(),
+    activeSandboxes: integer("active_sandboxes").notNull(),
+    vcpuCommitted: integer("vcpu_committed").notNull(),
+    memMibCommitted: integer("mem_mib_committed").notNull(),
+    vcpuCapacity: integer("vcpu_capacity"),
+    memMibCapacity: integer("mem_mib_capacity"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.runtimeId, table.at] }),
+    index("runtime_samples_at_idx").on(table.at),
+  ],
 );
 
 export const sandboxes = pgTable(
@@ -326,3 +344,4 @@ export type AuditLogRow = typeof auditLog.$inferSelect;
 export type SpanRow = typeof spans.$inferSelect;
 export type MachineSizeRow = typeof machineSizes.$inferSelect;
 export type RuntimeRow = typeof runtimes.$inferSelect;
+export type RuntimeSampleRow = typeof runtimeSamples.$inferSelect;

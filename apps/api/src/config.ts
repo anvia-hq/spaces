@@ -196,6 +196,11 @@ export const config = {
   },
   /** Auto-stop sweep interval. */
   reaperIntervalMs: Number(process.env.SPACES_REAPER_MS ?? 15_000),
+  /** Capacity history for the Cluster page (decision 0045). 0 disables sampling. */
+  samples: {
+    intervalMs: Number(process.env.SPACES_SAMPLE_INTERVAL_MS ?? 30_000),
+    retentionDays: Number(process.env.SPACES_SAMPLE_RETENTION_DAYS ?? 7),
+  },
 } as const;
 
 export type Config = typeof config;

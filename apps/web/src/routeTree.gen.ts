@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as KeysRouteImport } from './routes/keys'
+import { Route as MachineSizesRouteImport } from './routes/machine-sizes'
 import { Route as MembersRouteImport } from './routes/members'
 import { Route as RuntimesRouteImport } from './routes/runtimes'
 import { Route as SnapshotsRouteImport } from './routes/snapshots'
@@ -31,6 +32,11 @@ const AuditRoute = AuditRouteImport.update({
 const KeysRoute = KeysRouteImport.update({
   id: '/keys',
   path: '/keys',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MachineSizesRoute = MachineSizesRouteImport.update({
+  id: '/machine-sizes',
+  path: '/machine-sizes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MembersRoute = MembersRouteImport.update({
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/keys': typeof KeysRoute
+  '/machine-sizes': typeof MachineSizesRoute
   '/members': typeof MembersRoute
   '/runtimes': typeof RuntimesRoute
   '/snapshots': typeof SnapshotsRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/keys': typeof KeysRoute
+  '/machine-sizes': typeof MachineSizesRoute
   '/members': typeof MembersRoute
   '/runtimes': typeof RuntimesRoute
   '/snapshots': typeof SnapshotsRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/keys': typeof KeysRoute
+  '/machine-sizes': typeof MachineSizesRoute
   '/members': typeof MembersRoute
   '/runtimes': typeof RuntimesRoute
   '/snapshots': typeof SnapshotsRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/keys'
+    | '/machine-sizes'
     | '/members'
     | '/runtimes'
     | '/snapshots'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/keys'
+    | '/machine-sizes'
     | '/members'
     | '/runtimes'
     | '/snapshots'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/keys'
+    | '/machine-sizes'
     | '/members'
     | '/runtimes'
     | '/snapshots'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuditRoute: typeof AuditRoute
   KeysRoute: typeof KeysRoute
+  MachineSizesRoute: typeof MachineSizesRoute
   MembersRoute: typeof MembersRoute
   RuntimesRoute: typeof RuntimesRoute
   SnapshotsRoute: typeof SnapshotsRoute
@@ -155,6 +168,13 @@ declare module '@tanstack/react-router' {
       path: '/keys'
       fullPath: '/keys'
       preLoaderRoute: typeof KeysRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/machine-sizes': {
+      id: '/machine-sizes'
+      path: '/machine-sizes'
+      fullPath: '/machine-sizes'
+      preLoaderRoute: typeof MachineSizesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/members': {
@@ -199,6 +219,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditRoute: AuditRoute,
   KeysRoute: KeysRoute,
+  MachineSizesRoute: MachineSizesRoute,
   MembersRoute: MembersRoute,
   RuntimesRoute: RuntimesRoute,
   SnapshotsRoute: SnapshotsRoute,
