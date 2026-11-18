@@ -1,6 +1,6 @@
 # 0028 — Accounts, API keys, and one owner per resource
 
-- **Status:** accepted
+- **Status:** accepted, narrowed by [0044](./0044-a-cluster-is-one-team.md)
 - **Date:** 2026-11-16
 
 ## Context
@@ -13,8 +13,9 @@ Two things changed. The console is the product now, and a console that greets ev
 same pasted secret cannot show "your sandboxes". And clients want to hand a key to a CI job that must
 not be able to touch anything else. Neither is an organization feature; both are one user with a key.
 
-There is a hard constraint on the way: Aven already drives this server with the static key
-(`AVEN_SPACES_API_KEY`). Whatever is built, that key has to keep working across the deploy.
+There is a hard constraint on the way: a client already drives this server with the static key
+(`SPACES_API_KEY`), from the environment. Whatever is built, that key has to keep working across the
+deploy.
 
 ## Decision
 
@@ -64,8 +65,8 @@ There is a hard constraint on the way: Aven already drives this server with the 
   could not show a person their own work.
 - **A separate `auth` service or an external IdP.** A self-hosted runtime with a local SQLite file
   should not require an identity provider to boot.
-- **Scope every service function by passing `ownerId` explicitly.** Aven does exactly that with
-  `organizationId`, and it is more honest — but it means touching ~55 handlers and every service in
+- **Scope every service function by passing `ownerId` explicitly.** A sibling codebase does exactly
+  that with `organizationId`, and it is more honest — but it means touching ~55 handlers and every service in
   the same change, and a single missed parameter is an authorization hole. Filtering at the `store`
   is one gate that cannot be forgotten, and it is testable end to end.
 - **Make the operator key the admin user's key.** It would tie a credential that predates accounts to

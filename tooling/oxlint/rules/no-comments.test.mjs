@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-comments";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports line, block and trailing comments in TypeScript", () => {
     expect(lint(rule, "// hi\nconst a = 1;\n")).toHaveLength(1);
     expect(lint(rule, "/* hi */\nconst a = 1;\n")).toHaveLength(1);

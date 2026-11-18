@@ -2,11 +2,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-const PLUGIN = resolve(import.meta.dir, "../aven-plugin.mjs");
+const PLUGIN = resolve(import.meta.dir, "../spaces-plugin.mjs");
 const OXLINT = resolve(import.meta.dir, "../../../node_modules/.bin/oxlint");
 
 const run = (ruleName, code, filename, fix) => {
-  const dir = mkdtempSync(join(tmpdir(), "aven-oxlint-"));
+  const dir = mkdtempSync(join(tmpdir(), "spaces-oxlint-"));
 
   try {
     writeFileSync(
@@ -14,7 +14,7 @@ const run = (ruleName, code, filename, fix) => {
       JSON.stringify({
         categories: { correctness: "off" },
         jsPlugins: [PLUGIN],
-        rules: { [`aven/${ruleName}`]: "error" },
+        rules: { [`spaces/${ruleName}`]: "error" },
       }),
     );
     const file = join(dir, filename);

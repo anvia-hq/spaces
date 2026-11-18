@@ -41,13 +41,14 @@ bun run dev:api     # API with watch
 bun run dev:web     # console with HMR
 bun run typecheck   # all workspaces
 bun run build       # production build of the console
-bun run lint        # oxlint (aven's rules)
+bun run lint        # oxlint (this repo's rules)
 bun run lint:fix    # autofix
 bun run format      # oxfmt
 bun run format:check
 bun run test:rules  # the oxlint plugin's own tests
 bun run test        # API tests against a real Postgres (mock driver)
 bun run test:guest  # opt-in: needs a real microVM
+bun run prove:cluster  # a cluster of two, against real microVMs (see "A second runtime")
 bun run --cwd apps/api auth:schema   # regenerate the Better Auth tables
 bun run db:migrate-from-sqlite <db>  # one-way move out of a SQLite deployment
 ```
@@ -114,6 +115,21 @@ script against a fake machine and a local archive (`bun run test:scripts`), and 
 `SPACES_LOCAL_RUNTIME=off` on the API leaves only agents. The runtime tests (`src/modules/runtimes/`)
 start real agents against the real app on an ephemeral port, so they cover the protocol, reconnection
 and scheduling without any of this.
+
+### Proving a cluster of two
+
+[Decision 0044](docs/decision/0044-a-cluster-is-one-team.md) says a cluster counts as built when a second
+machine joined, a sandbox with no source was placed on it, and a stop and resume left its disk there.
+`bun run prove:cluster` checks exactly that against real microVMs: it registers a runtime, starts an
+agent for it, drains the built-in one, creates a sandbox with no source and refuses to go on unless it
+landed on the machine that just joined, runs a command in it, writes a file, stops it, resumes it, and
+fails if the sandbox moved or the file is gone. It cleans up after itself, including un-draining the
+built-in runtime.
+
+```bash
+bun run dev:api            # a control plane with a database, on :8787
+bun run prove:cluster      # SPACES_CONTROL_URL and SPACES_API_KEY override the defaults
+```
 
 ## Guest image
 

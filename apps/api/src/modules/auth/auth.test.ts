@@ -122,8 +122,8 @@ describe("API keys", () => {
   });
 });
 
-describe("one user cannot see another's resources", () => {
-  test("a sandbox created with one user's key is invisible to the other", async () => {
+describe("one cluster is one team: everyone signed in sees every row", () => {
+  test("a sandbox created with one user's key is visible to the other", async () => {
     const { cookie: danaCookie } = await signUp("dana@example.com");
     const dana = await createKey(danaCookie, "dana");
     const sandbox = await createSandbox(dana.key, "dana-sandbox");
@@ -133,24 +133,23 @@ describe("one user cannot see another's resources", () => {
     const erin = await createKey(erinCookie, "erin");
 
     const fetched = await call("GET", `/api/v1/sandboxes/${sandbox.id}`, { token: erin.key });
-    expect(fetched.status).toBe(404);
-
-    const deleted = await call("DELETE", `/api/v1/sandboxes/${sandbox.id}`, { token: erin.key });
-    expect(deleted.status).toBe(404);
+    expect(fetched.status).toBe(200);
 
     const listed = await call("GET", "/api/v1/sandboxes", { token: erin.key });
     const body = (await listed.json()) as { sandboxes: { id: string }[] };
-    expect(body.sandboxes.map((s) => s.id)).not.toContain(sandbox.id);
+    expect(body.sandboxes.map((s) => s.id)).toContain(sandbox.id);
 
     const events = await call("GET", `/api/v1/sandboxes/${sandbox.id}/events`, { token: erin.key });
-    const eventBody = (await events.json()) as { events: unknown[] };
-    expect(eventBody.events).toHaveLength(0);
+    expect(events.status).toBe(200);
 
     const own = await call("GET", `/api/v1/sandboxes/${sandbox.id}`, { token: dana.key });
     expect(own.status).toBe(200);
+
+    const deleted = await call("DELETE", `/api/v1/sandboxes/${sandbox.id}`, { token: erin.key });
+    expect(deleted.status).toBe(200);
   });
 
-  test("a saved-snapshot name cannot be taken over by another account", async () => {
+  test("a saved-snapshot name is unique across the cluster, and the row is visible", async () => {
     const { cookie: frankCookie } = await signUp("frank@example.com");
     const frank = await createKey(frankCookie, "frank");
     const sandbox = await createSandbox(frank.key, "frank-sandbox");
@@ -171,7 +170,7 @@ describe("one user cannot see another's resources", () => {
 
     const ginaList = await call("GET", "/api/v1/saved-snapshots", { token: gina.key });
     const body = (await ginaList.json()) as { snapshots: { name: string }[] };
-    expect(body.snapshots).toHaveLength(0);
+    expect(body.snapshots.map((entry) => entry.name)).toContain("shared-name");
 
     await call("DELETE", "/api/v1/saved-snapshots/shared-name", { token: frank.key });
   });

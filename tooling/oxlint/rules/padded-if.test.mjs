@@ -3,7 +3,7 @@ import { lint, lintFix } from "../testing/lint.mjs";
 
 const rule = "padded-if";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports an if with no blank line above and below", () => {
     const messages = lint(rule, "const a = 1;\nif (a) {\n  f();\n}\nconst b = 2;\n");
 

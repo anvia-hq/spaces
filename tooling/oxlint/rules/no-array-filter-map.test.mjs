@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-array-filter-map";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports filter then map and map then filter", () => {
     expect(lint(rule, "const a = xs.filter(f).map(g);")).toHaveLength(1);
     expect(lint(rule, "const a = xs.map(g).filter(f);")).toHaveLength(1);

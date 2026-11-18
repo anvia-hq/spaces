@@ -6,6 +6,7 @@
     "bun.lock",
     "**/routeTree.gen.ts",
     "packages/db/drizzle",
-    ".claude"
+    ".claude",
+    ".pi"
   ]
 }

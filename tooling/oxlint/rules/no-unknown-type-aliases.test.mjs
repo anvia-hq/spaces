@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-unknown-type-aliases";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports an alias of unknown", () => {
     expect(lint(rule, "type Json = unknown;")).toHaveLength(1);
     expect(lint(rule, "export type Value<T> = unknown;")).toHaveLength(1);

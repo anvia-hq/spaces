@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-chained-type-assertions";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("reports a double assertion", () => {
     expect(lint(rule, "const a = x as unknown as T;")).toHaveLength(1);
     expect(lint(rule, "const a = (x as any) as T;")).toHaveLength(1);

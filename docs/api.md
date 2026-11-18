@@ -331,8 +331,9 @@ Routes that older clients still call but that nothing here can back answer
 ## Accounts and keys
 
 People sign in with an email and password, or with GitHub where the deployment configured an OAuth app
-(`SPACES_GITHUB_CLIENT_ID` + `SPACES_GITHUB_CLIENT_SECRET`, decision 0036); sandboxes and snapshots
-belong to whoever made them either way.
+(`SPACES_GITHUB_CLIENT_ID` + `SPACES_GITHUB_CLIENT_SECRET`, decision 0036). A deployment is one cluster
+and one team, so every signed-in person sees every sandbox and snapshot (decision 0044); `ownerId` on a
+row records who made it, and the audit log records who did what.
 
 | Method       | Path                       | Notes                                                              |
 | ------------ | -------------------------- | ------------------------------------------------------------------ |

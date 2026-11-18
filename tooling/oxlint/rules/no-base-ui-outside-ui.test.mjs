@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-base-ui-outside-ui";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("refuses a Base UI import outside the vendored layer", () => {
     expect(
       lint(

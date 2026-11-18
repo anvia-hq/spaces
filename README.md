@@ -10,11 +10,15 @@ spaces gives you real virtual machines — not containers — and an API to crea
 them: boot one in about 250 ms, run commands in it, read and write files, publish a port, SSH in, freeze
 the disk, clone it. From the bundled console or your own tooling.
 
+One deployment is a **cluster**: a control plane holding the API, the database and the console, and one
+or more machines that run the sandboxes. One machine is a cluster of one; more capacity is one command
+on the next machine, and nothing changes for the client.
+
 Every sandbox has its own kernel, so nothing inside it can see the host filesystem, the host processes
 or another sandbox — and it is fast enough to throw away after one task.
 
 ```
-macOS · Apple Silicon (Hypervisor.framework)   Linux · KVM   Windows · WHP
+macOS · Apple Silicon (Hypervisor.framework)   Linux · KVM
 ```
 
 ---
@@ -25,8 +29,9 @@ macOS · Apple Silicon (Hypervisor.framework)   Linux · KVM   Windows · WHP
   scripts, generated code and AI agents run without access to your machine.
 - **Fast enough to be disposable.** ~250 ms to a usable machine, 20–45 ms per command through the full
   API. One sandbox per task instead of one long-lived box.
-- **Yours, end to end.** Your machine or one KVM box on your network. No account, no cloud dependency,
-  no egress bill.
+- **Yours, end to end.** Your machines, on your network. No account, no cloud dependency, no egress bill.
+- **A cluster, not one box.** A control plane schedules each sandbox onto a runtime that has room; a
+  disk never leaves the machine that holds it, so stop and resume cost nothing and never move data.
 - **Everything a sandbox needs.** Networking and package installs out of the box, published ports, SSH,
   Docker, durable snapshots, copy-on-write forks.
 
@@ -43,7 +48,7 @@ macOS · Apple Silicon (Hypervisor.framework)   Linux · KVM   Windows · WHP
 
 ## Get started
 
-Requirements: macOS 12+ on Apple Silicon, Linux with `/dev/kvm`, or Windows 11 with WHP; **Bun 1.1+**;
+Requirements: macOS 12+ on Apple Silicon, or Linux with `/dev/kvm`; **Bun 1.1+**;
 ~5 GB of disk. The `msb` CLI installs without root and never needs it.
 
 ```bash
@@ -71,7 +76,8 @@ sandbox, set `SPACES_BOOTSTRAP` — see [docs/configuration.md](docs/configurati
 ## Console, API, accounts
 
 The console covers everything the API does — terminal, files, ports, SSH, snapshots, usage — plus the
-lifecycle timeline for each sandbox. Sandboxes belong to whoever made them, every change lands in an
+lifecycle timeline for each sandbox. One deployment is one team, so everyone who signs in sees every
+sandbox; every change is attributed to whoever made it and lands in an
 append-only audit log, and every request and its database and driver work are traced into the server's
 own database. People sign in by email and password; GitHub is an optional second door, configured from
 the environment and absent unless it is.
@@ -95,6 +101,20 @@ installs a systemd unit and verifies `/health`. The API serves the console itsel
 and `tailscale serve` terminates HTTPS in front of it; restarting the service does not kill running
 sandboxes. Targets, configuration and the full environment table:
 [docs/configuration.md](docs/configuration.md).
+
+That install is a cluster of one. To add a machine, register a runtime in the console and run the
+command it prints on the machine that will hold sandboxes:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/anvia-hq/spaces/main/install.sh | bash -s -- \
+  --runtime --url https://spaces.example.com --token spr_…
+```
+
+It installs Bun and `msb` if they are missing, writes `~/.spaces/runtime.env`, installs a user service
+and waits for the agent to say it is connected. The agent dials out, so the machine needs no inbound
+port and no SSH key. `spaces doctor` explains anything that went wrong, and `spaces update` is the same
+command with no arguments. On the control plane, a runtime can be drained to stop taking new work
+without disturbing what is on it.
 
 ## Development
 

@@ -3,7 +3,7 @@ import { lint } from "../testing/lint.mjs";
 
 const rule = "no-atom-import";
 
-describe(`aven/${rule}`, () => {
+describe(`spaces/${rule}`, () => {
   it("refuses an atom import from a route or a component", () => {
     const code = 'import { threadsAtom } from "@/modules/threads/atoms/threads-atom";\n';
     expect(lint(rule, code, "apps/platform/src/routes/threads.tsx")).toHaveLength(1);

@@ -2,8 +2,9 @@
  * The audit log: every mutation, once, with who and where from.
  *
  * Runs on the mock driver like the rest of the suite. The interesting properties
- * are coverage (a route nobody remembered still lands), scoping (a user reads
- * their own), and the keyset page (it keeps walking while the log grows).
+ * are coverage (a route nobody remembered still lands), that a reader who can
+ * sign in reads the whole cluster's log (decision 0044), and the keyset page
+ * (it keeps walking while the log grows).
  */
 import { describe, expect, test } from "bun:test";
 
@@ -182,8 +183,8 @@ describe("reading the log", () => {
   });
 });
 
-describe("one user cannot read another's log", () => {
-  test("a user sees their own entries and not the operator's", async () => {
+describe("a team shares one log", () => {
+  test("a user reads entries they did not cause", async () => {
     const cookie = await signUp("audit-scope@example.com");
     const key = await createKey(cookie, "scope-key");
     const sandbox = await call("POST", "/api/v1/sandboxes", {
@@ -192,18 +193,17 @@ describe("one user cannot read another's log", () => {
     });
     const id = ((await sandbox.json()) as { sandbox: { id: string } }).sandbox.id;
 
-    const mine = await entries("limit=200", key.key);
+    const mine = await entries(`limit=200&targetId=${id}`, key.key);
     expect(mine.entries.length).toBeGreaterThan(0);
     expect(mine.entries.every((entry) => entry.actor.kind === "user")).toBe(true);
-    expect(mine.entries.map((entry) => entry.target.id)).toContain(id);
 
     const someoneElse = await signUp("audit-scope-2@example.com");
     const otherKey = await createKey(someoneElse, "scope-key-2");
-    const theirs = await entries("limit=200", otherKey.key);
+    const theirs = await entries(`limit=200&targetId=${id}`, otherKey.key);
 
-    expect(theirs.entries.every((entry) => entry.target.id !== id)).toBe(true);
+    expect(theirs.entries.map((entry) => entry.target.id)).toContain(id);
 
-    const operator = await entries("limit=200");
+    const operator = await entries(`limit=200&targetId=${id}`);
     expect(operator.entries.map((entry) => entry.target.id)).toContain(id);
   });
 });
