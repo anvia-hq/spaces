@@ -51,6 +51,7 @@ out. Numbers quoted are measured, not estimated.
 | [0041](./0041-a-sandbox-s-root-disk-is-its-machine-size-s-disk.md) | A sandbox's root disk is its machine size's disk                       | accepted                             |
 | [0042](./0042-control-plane-and-runtimes.md)                       | A control plane with many runtimes, joined by an outbound agent        | accepted, extends 0007, narrows 0017 |
 | [0043](./0043-install-a-runtime-with-one-command.md)               | A runtime is installed by one command, run on the machine              | accepted, builds on 0042             |
+| [0044](./0044-a-cluster-is-one-team.md)                            | A cluster is one team, and nothing here is held back                   | accepted, narrows 0028               |
 
 ## Reading order
 
@@ -73,7 +74,7 @@ Changing a specific area? Jump straight to the relevant record:
 | Deploying it somewhere               | 0025, 0017, 0022, 0042       |
 | Runtimes, scheduling, the agent      | 0042, 0043, 0007, 0017       |
 | Where a file goes                    | 0027                         |
-| Auth, keys, who sees which sandbox   | 0028, 0037                   |
+| Auth, keys, who sees which sandbox   | 0028, 0044, 0037             |
 | Audit log, who did what              | 0031                         |
 | Tracing, spans, metrics              | 0032                         |
 | Style, lint rules, formatting        | 0029                         |
@@ -89,4 +90,5 @@ No decision here has been superseded except 0001, which replaced the original Fi
 record explains why the codebase carries no Firecracker code despite having started there), and the parts
 of 0023 that 0026 rewrites: the primitive kit, the token names, and inline confirmation for destructive
 actions that destroy a disk. 0039 replaces the ReUI and one-size parts of 0026. 0035 narrows 0016 rather than replacing it: a bootstrap snippet is still the
-per-deployment hook, and the starter image is now the other supported answer for a toolchain.
+per-deployment hook, and the starter image is now the other supported answer for a toolchain. 0044 narrows 0028: rows still
+record their owner, but on a cluster everyone who can sign in sees every row, so ownership is attribution and no longer a filter.

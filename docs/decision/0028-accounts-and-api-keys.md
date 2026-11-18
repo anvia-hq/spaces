@@ -1,6 +1,6 @@
 # 0028 — Accounts, API keys, and one owner per resource
 
-- **Status:** accepted
+- **Status:** accepted, narrowed by [0044](./0044-a-cluster-is-one-team.md)
 - **Date:** 2026-11-16
 
 ## Context
