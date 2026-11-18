@@ -10,4 +10,5 @@ apps/api/.data/
 # has run to generate it. Regenerated automatically by the router plugin.
 # Local agent worktrees (nested git checkouts, not part of the build)
 .claude/
+.pi/
 .run/
