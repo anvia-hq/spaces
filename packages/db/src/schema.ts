@@ -102,12 +102,29 @@ export const sandboxes = pgTable(
     /** Better Auth user id that owns this sandbox; null for the operator key. */
     ownerId: text("owner_id"),
     runtimeId: text("runtime_id").notNull().default("local"),
+    setupStatus: text("setup_status"),
+    setupError: text("setup_error"),
+    networkPolicy: jsonb("network_policy").$type<{
+      mode: "default" | "open" | "deny" | "allow";
+      allow: string[];
+    }>(),
   },
   (table) => [
     index("sandboxes_state_idx").on(table.state),
     index("sandboxes_owner_idx").on(table.ownerId),
     index("sandboxes_runtime_idx").on(table.runtimeId),
   ],
+);
+
+export const idempotencyKeys = pgTable(
+  "idempotency_keys",
+  {
+    key: text("key").primaryKey(),
+    sandboxId: text("sandbox_id").notNull(),
+    createdAt: createdAt("created_at").notNull(),
+    expiresAt: createdAt("expires_at").notNull(),
+  },
+  (table) => [index("idempotency_keys_expires_idx").on(table.expiresAt)],
 );
 
 export const snapshots = pgTable(
@@ -345,3 +362,4 @@ export type SpanRow = typeof spans.$inferSelect;
 export type MachineSizeRow = typeof machineSizes.$inferSelect;
 export type RuntimeRow = typeof runtimes.$inferSelect;
 export type RuntimeSampleRow = typeof runtimeSamples.$inferSelect;
+export type IdempotencyKeyRow = typeof idempotencyKeys.$inferSelect;
