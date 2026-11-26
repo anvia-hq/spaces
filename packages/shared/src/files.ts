@@ -32,7 +32,7 @@ export function resolveSandboxPath(input: string): { ok: true; path: string } | 
   return allowed ? { ok: true, path: normalized } : { ok: false };
 }
 
-const sandboxPath = z
+export const sandboxPath = z
   .string()
   .min(1)
   .transform((value, ctx) => {

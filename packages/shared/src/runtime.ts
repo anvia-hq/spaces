@@ -23,6 +23,7 @@ export const DriverCapabilities = z.object({
   exec: z.boolean(),
   files: z.boolean(),
   persistence: z.boolean(),
+  networkPolicy: z.boolean().optional(),
 });
 export type DriverCapabilities = z.infer<typeof DriverCapabilities>;
 

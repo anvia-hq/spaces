@@ -29,6 +29,7 @@ export const runtimes = pgTable(
       exec: boolean;
       files: boolean;
       persistence: boolean;
+      networkPolicy?: boolean;
     }>(),
     vcpu: integer("vcpu"),
     memMib: integer("mem_mib"),
@@ -87,7 +88,7 @@ export const sandboxes = pgTable(
     hydratedAt: createdAt("hydrated_at"),
     ownerId: text("owner_id"),
     runtimeId: text("runtime_id").notNull().default("local"),
-    setupStatus: text("setup_status"),
+    setupStatus: text("setup_status").$type<"pending" | "running" | "done" | "failed">(),
     setupError: text("setup_error"),
     networkPolicy: jsonb("network_policy").$type<{
       mode: "default" | "open" | "deny" | "allow";

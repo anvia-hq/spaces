@@ -71,11 +71,16 @@ export function fail(c: Context<ApiEnv>, code: ErrorCode, message: string) {
   return c.json(body, status as never);
 }
 
-export function formatZodError(error: z.ZodError): string {
+export function formatZodError(
+  error: z.ZodError,
+  target: keyof ValidationTargets = "json",
+): string {
+  const label = target === "query" ? "parameter" : "field";
+  const prefix = target === "query" ? "invalid_query: " : "";
   return error.issues
     .map((issue) =>
       issue.code === "unrecognized_keys"
-        ? `invalid_query: unknown parameter${issue.keys.length > 1 ? "s" : ""} ${issue.keys
+        ? `${prefix}unknown ${label}${issue.keys.length > 1 ? "s" : ""} ${issue.keys
             .map((k) => `\`${k}\``)
             .join(", ")}`
         : `${issue.path.join(".") || "body"}: ${issue.message}`,
@@ -189,13 +194,17 @@ export function validate<T extends z.ZodTypeAny, Target extends keyof Validation
 
     const issues = result.error.issues;
     const badPath = issues.some((i) => i.message.startsWith("invalid_path:"));
-    const badQuery = target === "query" || issues.some((i) => i.code === "unrecognized_keys");
+    const badNetwork = issues.some(
+      (i) => i.path[0] === "network" || i.message.startsWith("invalid_network_policy:"),
+    );
+    const badQuery = target === "query";
 
     let code: ServiceError["code"] = "invalid_body";
 
     if (badPath) code = "invalid_path";
+    else if (badNetwork) code = "invalid_network_policy";
     else if (badQuery) code = "invalid_query";
 
-    throw new ServiceError(code, formatZodError(result.error));
+    throw new ServiceError(code, formatZodError(result.error, target));
   });
 }
