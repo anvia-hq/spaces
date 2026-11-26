@@ -117,4 +117,24 @@ suite("guest runtime (real microVM)", () => {
     },
     90_000,
   );
+
+  test("per-sandbox deny policy blocks outbound traffic while keeping exec working", async () => {
+    const deniedId = `bx_nd${Date.now().toString(36).slice(-6)}`;
+    try {
+      const handle = await driver.create({
+        sandboxId: deniedId,
+        type: "default",
+        size: { vcpu: 2, memMib: 2048, diskGb: 20 },
+        network: { mode: "deny", allow: [] },
+      });
+      const probe = await driver.exec(handle.ref, {
+        command:
+          "wget -qO- --timeout=3 https://example.com >/dev/null 2>&1 && echo reachable || echo blocked",
+        timeoutSeconds: 20,
+      });
+      expect(probe.stdout.trim()).toBe("blocked");
+    } finally {
+      await driver.destroy(deniedId).catch(() => {});
+    }
+  }, 120_000);
 });

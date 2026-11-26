@@ -70,11 +70,12 @@ export interface SandboxDriver {
     exec: boolean;
     files: boolean;
     persistence: boolean;
+    networkPolicy?: boolean;
   };
 
   create(options: CreateOptions): Promise<DriverHandle>;
   resume(options: CreateOptions & { fromRef: string }): Promise<DriverHandle>;
-  fork(options: CreateOptions & { fromRef: string }): Promise<DriverHandle>;
+  fork(options: Omit<CreateOptions, "network"> & { fromRef: string }): Promise<DriverHandle>;
   restore(options: CreateOptions & { fromRef: string }): Promise<DriverHandle>;
 
   stop(sandboxId: string): Promise<{ diskRef: string }>;

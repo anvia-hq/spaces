@@ -1,5 +1,9 @@
 import { SANDBOX_WORKDIR } from "@spaces/shared/files";
-import { classifyNetworkEntry, type NetworkPolicy } from "@spaces/shared/sandbox";
+import {
+  classifyNetworkEntry,
+  isPrivateIpOrCidr,
+  type NetworkPolicy,
+} from "@spaces/shared/sandbox";
 import { config } from "../../config.ts";
 import type { FileEntry, FileMatch } from "@spaces/shared/files";
 import type {
@@ -70,7 +74,7 @@ exec sh -c "$s"
 `;
 export class MicrosandboxDriver implements SandboxDriver {
   readonly kind = "microsandbox";
-  readonly capabilities = { exec: true, files: true, persistence: true };
+  readonly capabilities = { exec: true, files: true, persistence: true, networkPolicy: true };
 
   private readonly host: string;
   private readonly msb: string;
@@ -174,7 +178,7 @@ export class MicrosandboxDriver implements SandboxDriver {
     return { ref: `msb:${o.sandboxId}`, url: null, ip: await this.guestIp(o.sandboxId) };
   }
 
-  async fork(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
+  async fork(o: Omit<CreateOptions, "network"> & { fromRef: string }): Promise<DriverHandle> {
     await this.msbRun([
       "fork",
       this.nameOf(o.fromRef),
@@ -198,7 +202,7 @@ export class MicrosandboxDriver implements SandboxDriver {
           cpus,
           "-m",
           memory,
-          ...restoreNetworkArgsFor(o.network),
+          ...this.restoreNetworkArgs(o.network),
           ...this.portArgs(o.ports ?? []),
         ],
         this.timeoutMs,
@@ -302,6 +306,15 @@ export class MicrosandboxDriver implements SandboxDriver {
       defaultEgress: config.netDefaultEgress,
       defaultIngress: config.netDefaultIngress,
       dns: config.netDns,
+      policy,
+    });
+  }
+
+  private restoreNetworkArgs(policy?: NetworkPolicy): string[] {
+    return restoreNetworkArgsFor({
+      profile: config.netProfile,
+      rules: config.netRules,
+      defaultEgress: config.netDefaultEgress,
       policy,
     });
   }
@@ -955,36 +968,92 @@ function allowRulesFor(entries: string[]): { rules: string[]; needsDns: boolean 
   const rules: string[] = [];
   let needsDns = false;
 
-  for (const entry of entries) {
+  for (const raw of entries) {
+    const entry = raw.trim().toLowerCase();
     const kind = classifyNetworkEntry(entry);
 
     if (kind === "domain") {
       needsDns = true;
       rules.push(`allow@${entry}:tcp:443`, `allow@${entry}:tcp:80`);
     } else if (kind === "ip") {
-      rules.push(`allow@${entry}`);
+      if (isPrivateIpOrCidr(entry)) {
+        throw new DriverFailure(`private or reserved IP/CIDR '${entry}' is not allowed`);
+      }
+
+      const target = entry.includes(":") ? `[${entry}]` : entry;
+      rules.push(`allow@${target}`);
+    } else {
+      throw new DriverFailure(`invalid network allow entry '${entry}'`);
     }
   }
 
   return { rules, needsDns };
 }
 
-export function restoreNetworkArgsFor(policy?: NetworkPolicy): string[] {
-  if (!policy || policy.mode === "default") return [];
+export function restoreNetworkArgsFor(o: {
+  profile: string;
+  rules: string[];
+  defaultEgress: string;
+  policy?: NetworkPolicy;
+}): string[] {
+  if (o.policy && o.policy.mode !== "default") {
+    if (o.policy.mode === "deny") return ["--no-net"];
 
-  if (policy.mode === "deny") return ["--no-net"];
+    if (o.policy.mode === "open") {
+      return [
+        "--net-default",
+        "deny",
+        "--net-rule",
+        "allow:ingress@private",
+        "--net-rule",
+        "allow:ingress@public",
+        "--net-rule",
+        "allow@public",
+        "--net-rule",
+        "allow@dns",
+      ];
+    }
 
-  if (policy.mode === "open") {
-    return ["--net-default", "deny", "--net-rule", "allow@public", "--net-rule", "allow@dns"];
+    const { rules, needsDns } = allowRulesFor(o.policy.allow);
+    const args = [
+      "--net-default",
+      "deny",
+      "--net-rule",
+      "allow:ingress@private",
+      "--net-rule",
+      "allow:ingress@public",
+    ];
+
+    if (needsDns) args.push("--net-rule", "allow@dns");
+
+    for (const rule of rules) args.push("--net-rule", rule);
+
+    return args;
   }
 
-  const { rules, needsDns } = allowRulesFor(policy.allow);
-  const args = ["--no-net"];
+  const profile = o.profile.trim();
 
-  if (needsDns) args.push("--net-rule", "allow@dns");
+  if (!profile || profile === "none") return ["--no-net"];
 
-  for (const rule of rules) args.push("--net-rule", rule);
+  if (profile === "all") {
+    const args = ["--net-default", o.defaultEgress === "deny" ? "deny" : "allow"];
+    for (const rule of o.rules) args.push("--net-rule", rule);
+    return args;
+  }
 
+  const args = [
+    "--net-default",
+    "deny",
+    "--net-rule",
+    "allow:ingress@private",
+    "--net-rule",
+    "allow:ingress@public",
+    "--net-rule",
+    "allow@public",
+    "--net-rule",
+    "allow@dns",
+  ];
+  for (const rule of o.rules) args.push("--net-rule", rule);
   return args;
 }
 
@@ -1008,7 +1077,7 @@ export function networkArgsFor(o: {
     }
 
     const { rules, needsDns } = allowRulesFor(o.policy.allow);
-    const args = ["--no-net"];
+    const args = ["--net-default-egress", "deny", "--net-default-ingress", "allow"];
 
     if (needsDns) {
       args.push("--net-rule", "allow@dns");

@@ -15,7 +15,12 @@ export const mockRestores: { sandboxId: string; fromRef: string }[] = [];
 
 export class MockDriver implements SandboxDriver {
   readonly kind = "mock";
-  readonly capabilities = { exec: true, files: false, persistence: true };
+  readonly capabilities: SandboxDriver["capabilities"] = {
+    exec: true,
+    files: false,
+    persistence: true,
+    networkPolicy: true,
+  };
 
   private live = new Map<string, { size: MachineSpec; bootedAt: number }>();
 
@@ -33,9 +38,18 @@ export class MockDriver implements SandboxDriver {
     return { ref, url: `https://mock-${ref.slice(-6)}.spaces.local`, ip: `10.64.${n}.${m}` };
   }
 
+  private recordPorts(sandboxId: string, ports?: CreateOptions["ports"]) {
+    if (!ports) return;
+
+    for (const port of ports) {
+      this.published.set(port.hostPort, { sandboxId, guestPort: port.guestPort });
+    }
+  }
+
   async create(o: CreateOptions): Promise<DriverHandle> {
     await this.jitter();
     this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    this.recordPorts(o.sandboxId, o.ports);
     return this.handle(o.sandboxId);
   }
 
@@ -45,9 +59,10 @@ export class MockDriver implements SandboxDriver {
     return this.handle(o.sandboxId);
   }
 
-  async fork(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
+  async fork(o: Omit<CreateOptions, "network"> & { fromRef: string }): Promise<DriverHandle> {
     await this.jitter(150);
     this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    this.recordPorts(o.sandboxId, o.ports);
     return this.handle(o.sandboxId);
   }
 
@@ -59,6 +74,7 @@ export class MockDriver implements SandboxDriver {
     }
 
     this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    this.recordPorts(o.sandboxId, o.ports);
     mockRestores.push({ sandboxId: o.sandboxId, fromRef: o.fromRef });
     return this.handle(o.sandboxId);
   }
