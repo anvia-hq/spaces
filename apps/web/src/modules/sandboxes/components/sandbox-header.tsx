@@ -64,17 +64,19 @@ export function SandboxHeader({
           </div>
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 void navigator.clipboard.writeText(sandbox.id);
                 toast.success("Sandbox ID copied");
               }}
-              className="group inline-flex items-center gap-1.5 rounded-md border border-border/80 bg-card/60 px-2 py-1 text-base text-muted-foreground transition-colors hover:text-foreground"
+              className="group h-auto gap-1.5 rounded-md border-border/80 bg-card/60 px-2 py-1 text-base font-normal text-muted-foreground hover:text-foreground"
             >
               {sandbox.id}
               <Copy className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
-            </button>
+            </Button>
             <MetaLine
               items={[
                 size

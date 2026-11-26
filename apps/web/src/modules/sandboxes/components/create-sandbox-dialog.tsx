@@ -3,6 +3,8 @@ import type { MachineSize, NetworkMode, NetworkPolicy, SandboxType } from "@spac
 import { Check } from "lucide-react";
 import { Segmented } from "@/components/console/segmented";
 import { Button } from "@/components/ui/button";
+import { Fieldset, FieldsetLegend } from "@/components/ui/fieldset";
+import { Form } from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -127,7 +129,7 @@ export function CreateSandboxDialog({
           <DialogTitle>Create sandbox</DialogTitle>
         </DialogHeader>
 
-        <form
+        <Form
           id="create-sandbox"
           className="flex flex-col gap-5"
           onSubmit={(event) => {
@@ -135,11 +137,11 @@ export function CreateSandboxDialog({
             submit();
           }}
         >
-          <fieldset className="flex flex-col gap-2">
+          <Fieldset className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between">
-              <legend className="text-base font-medium tracking-wide text-muted-foreground">
+              <FieldsetLegend className="text-base font-medium tracking-wide text-muted-foreground">
                 Machine
-              </legend>
+              </FieldsetLegend>
             </div>
 
             <div role="radiogroup" aria-label="Machine size" className="grid grid-cols-2 gap-2">
@@ -147,16 +149,17 @@ export function CreateSandboxDialog({
                 const active = type === size.name;
 
                 return (
-                  <button
+                  <Button
                     key={size.name}
                     type="button"
+                    variant="outline"
                     role="radio"
                     aria-checked={active}
                     onClick={() => setType(size.name)}
                     className={cn(
-                      "flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
+                      "h-auto flex-col items-stretch justify-start gap-1 rounded-lg px-3 py-2.5 text-left font-normal whitespace-normal",
                       active
-                        ? "border-primary bg-primary/10"
+                        ? "border-primary bg-primary/10 hover:bg-primary/10"
                         : "border-border bg-card/60 hover:border-border hover:text-foreground",
                     )}
                   >
@@ -175,28 +178,28 @@ export function CreateSandboxDialog({
                     <span className="text-muted-foreground">
                       {size.vcpu} vCPU · {size.memMib / 1024} GiB
                     </span>
-                  </button>
+                  </Button>
                 );
               })}
             </div>
-          </fieldset>
+          </Fieldset>
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-base font-medium tracking-wide text-muted-foreground">
+          <Fieldset className="flex flex-col gap-2">
+            <FieldsetLegend className="text-base font-medium tracking-wide text-muted-foreground">
               Auto-stop
-            </legend>
+            </FieldsetLegend>
             <Segmented
               label="Auto-stop"
               options={TTL_CHOICES.map((c) => ({ value: c.value, label: c.label }))}
               value={ttl as (typeof TTL_CHOICES)[number]["value"]}
               onChange={(next) => setTtl(next)}
             />
-          </fieldset>
+          </Fieldset>
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-base font-medium tracking-wide text-muted-foreground">
+          <Fieldset className="flex flex-col gap-2">
+            <FieldsetLegend className="text-base font-medium tracking-wide text-muted-foreground">
               Network
-            </legend>
+            </FieldsetLegend>
             <Segmented
               label="Network"
               options={NETWORK_CHOICES}
@@ -213,7 +216,7 @@ export function CreateSandboxDialog({
                 onChange={(event) => setAllowText(event.target.value)}
               />
             )}
-          </fieldset>
+          </Fieldset>
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="sandbox-name" className="text-base font-medium text-muted-foreground">
@@ -250,7 +253,7 @@ export function CreateSandboxDialog({
               </Select>
             </div>
           )}
-        </form>
+        </Form>
 
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Ban, ShieldCheck, ShieldMinus, ShieldPlus, Undo2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { ManagedUser } from "@/lib/api.ts";
 import { timeAgo } from "@/lib/format.ts";
@@ -85,9 +86,9 @@ export function MemberRow({
       </div>
 
       {!user.banned && (
-        <input
+        <Input
           aria-label={`Reason for banning ${user.email}`}
-          className="min-w-0 basis-full rounded-md border border-border bg-background px-2 py-1 text-base text-foreground sm:basis-64"
+          className="min-w-0 basis-full text-base sm:basis-64"
           placeholder="reason (optional)"
           maxLength={280}
           value={reason}

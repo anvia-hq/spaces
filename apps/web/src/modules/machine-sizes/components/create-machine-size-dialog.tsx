@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { MACHINE_SIZE_NAME } from "@spaces/shared/sandbox";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -50,7 +51,7 @@ export function CreateMachineSizeDialog({
         <DialogHeader>
           <DialogTitle>Add a machine size</DialogTitle>
         </DialogHeader>
-        <form
+        <Form
           id="create-machine-size"
           className="flex flex-col gap-4"
           onSubmit={(event) => {
@@ -59,7 +60,7 @@ export function CreateMachineSizeDialog({
           }}
         >
           <MachineSizeInputs fields={fields} onChange={setFields} showName />
-        </form>
+        </Form>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={busy}>
             Cancel

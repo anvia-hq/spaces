@@ -36,18 +36,20 @@ export function PortsPanel({ sandboxId, live }: { sandboxId: string; live: boole
                 common
               </span>
               {SUGGESTED.map((suggestion) => (
-                <button
+                <Button
                   key={suggestion}
                   type="button"
+                  variant="outline"
+                  size="xs"
                   disabled={!live}
                   onClick={() => {
                     setPort(String(suggestion));
                     void host(suggestion);
                   }}
-                  className="rounded border border-border/80 bg-card/60 px-2 py-0.5 text-base text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:opacity-40"
+                  className="h-auto rounded border-border/80 bg-card/60 px-2 py-0.5 text-base font-normal text-muted-foreground hover:border-border hover:text-foreground"
                 >
                   :{suggestion}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
