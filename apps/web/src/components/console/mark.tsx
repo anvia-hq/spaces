@@ -1,16 +1,3 @@
-/**
- * The mark: an axonometric box, drawn by hand.
- *
- * The geometry is true; the lines are not. Every edge is a shallow curve, and
- * every end overshoots its corner by a different amount — 0.7 to 3.3 units on
- * the same box, deliberately not matched to the edge beside it. Even overshoot
- * reads as a rendering trick; uneven overshoot reads as a pencil.
- *
- * Each edge is drawn twice with unrelated overshoots, plus a fainter third pass
- * on three of them. The strokes are thin on purpose: crossings only read as
- * crossings while the lines stay apart, and at the 20px this runs at anything
- * heavier closes the corners into blobs.
- */
 export function Mark({ size = 24 }: { size?: number }) {
   return (
     <svg

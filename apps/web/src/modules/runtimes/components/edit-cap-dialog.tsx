@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +47,7 @@ export function EditCapDialog({
         <DialogHeader>
           <DialogTitle>Max sandboxes on {runtime.name}</DialogTitle>
         </DialogHeader>
-        <form
+        <Form
           id={`cap-${runtime.id}`}
           className="flex flex-col gap-1.5"
           onSubmit={(event) => {
@@ -70,7 +71,7 @@ export function EditCapDialog({
             autoFocus
             onChange={(event) => setCap(event.target.value)}
           />
-        </form>
+        </Form>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
             Cancel

@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/console/empty-state";
 import { Notice } from "@/components/console/notice";
 import { Panel } from "@/components/console/panel";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { looksPublic, sshCommand } from "../command.ts";
@@ -24,13 +25,13 @@ export function SshPanel({ sandboxId, live }: { sandboxId: string; live: boolean
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label
+            <Label
               htmlFor="sshkey-input"
-              className="flex items-center gap-1.5 text-base font-medium text-muted-foreground"
+              className="gap-1.5 text-base font-medium text-muted-foreground"
             >
               <KeyRound className="size-3" />
               Public key
-            </label>
+            </Label>
             <Textarea
               id="sshkey-input"
               className="min-h-[84px] resize-y text-base leading-relaxed"

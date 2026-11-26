@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { CreateSandboxRequest, UpdateSandboxRequest } from "@spaces/shared/sandbox";
 import type { SandboxState } from "@spaces/shared/sandbox";
-import { type ApiEnv, validate } from "../../errors.ts";
+import { type ApiEnv, fail, validate } from "../../errors.ts";
 import {
   EventsQuery,
   ForkRequest,
@@ -12,13 +12,13 @@ import {
 import {
   createSandbox,
   destroySandbox,
-  findIdempotentSandbox,
   forkSandbox,
   getSandbox,
+  getSandboxNetwork,
   getStopOperation,
-  listSandboxes,
+  listSandboxesPage,
+  parseSandboxCursor,
   recoverSandbox,
-  rememberIdempotentSandbox,
   resumeSandbox,
   sandboxEvents,
   stopSandbox,
@@ -36,38 +36,49 @@ function labelList(label: string | string[] | undefined): string[] {
 export const sandboxesRouter = new Hono<ApiEnv>()
   .get("/sandboxes", validate("query", SandboxListQuery), async (c) => {
     const q = c.req.valid("query");
+    const cursor = q.cursor !== undefined ? parseSandboxCursor(q.cursor) : undefined;
+
+    if (q.cursor !== undefined && !cursor) {
+      return fail(c, "invalid_query", "cursor must be <iso-timestamp>|<sandboxId>");
+    }
+
     const labels = labelList(q.label);
-    const sandboxes = await listSandboxes({
+    const page = await listSandboxesPage({
       states: q.state ? (q.state.split(",").map((s) => s.trim()) as SandboxState[]) : undefined,
       name: q.name,
       namePrefix: q.namePrefix,
+      stoppedBefore: q.stoppedBefore,
+      sort: q.sort,
+      limit: q.limit,
+      cursor: cursor ?? undefined,
       labels,
     });
-    return c.json({ ok: true, type: "sandbox.list", sandboxes });
+    return c.json({
+      ok: true,
+      type: "sandbox.list",
+      sandboxes: page.sandboxes,
+      nextCursor: page.nextCursor,
+    });
   })
   .post("/sandboxes", validate("json", CreateSandboxRequest), async (c) => {
     const input = c.req.valid("json");
-    const key = c.req.header("idempotency-key");
+    const rawKey = c.req.header("idempotency-key");
+    let key: string | undefined;
 
-    if (key) {
-      const existing = await findIdempotentSandbox(key);
+    if (rawKey !== undefined) {
+      key = rawKey.trim();
 
-      if (existing) {
-        return c.json(
-          { ok: true, type: "sandbox.created", status: existing.state, sandbox: existing },
-          202,
-        );
+      if (!key || key.length > 255) {
+        return fail(c, "invalid_body", "Idempotency-Key must be 1-255 characters");
       }
     }
 
-    const sandbox = await createSandbox(input);
-
-    if (key) rememberIdempotentSandbox(key, sandbox.id);
+    const { sandbox, ready, replayed } = await createSandbox(input, key);
 
     c.set("audit", {
       targetId: sandbox.id,
       targetType: "sandbox",
-      metadata: { type: sandbox.type, name: sandbox.name },
+      metadata: { type: sandbox.type, name: sandbox.name, replayed },
     });
 
     return c.json(
@@ -78,11 +89,18 @@ export const sandboxesRouter = new Hono<ApiEnv>()
         ttlSeconds: input.ttlSeconds,
         sandbox,
       },
-      202,
+      ready ? 201 : 202,
     );
   })
   .get("/sandboxes/:sandboxId", async (c) =>
     c.json({ ok: true, type: "sandbox", sandbox: await getSandbox(c.req.param("sandboxId")) }),
+  )
+  .get("/sandboxes/:sandboxId/network", async (c) =>
+    c.json({
+      ok: true as const,
+      type: "sandbox.network" as const,
+      network: await getSandboxNetwork(c.req.param("sandboxId")),
+    }),
   )
   .patch("/sandboxes/:sandboxId", validate("json", UpdateSandboxRequest), async (c) => {
     const sandbox = await updateSandbox(c.req.param("sandboxId"), c.req.valid("json"));
@@ -122,6 +140,7 @@ export const sandboxesRouter = new Hono<ApiEnv>()
       ttlSeconds: body.ttlSeconds,
       type: body.type,
       name: body.name,
+      env: body.env,
     });
     return c.json({ ok: true, type: "sandbox.resumed", status: sandbox.state, sandbox }, 202);
   })

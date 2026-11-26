@@ -5,14 +5,8 @@ import { ServiceError } from "../../errors.ts";
 import { driverOfSandbox } from "../runtimes/service.ts";
 import { requireLiveSandbox, requireSandbox } from "../sandboxes/service.ts";
 
-/** Guest layout of the process runtime; mirrors MicrosandboxDriver.PROC_DIR. */
 export const SANDBOX_PROC_DIR = "/tmp/.spaces/proc";
 
-/**
- * Public `processId` is the guest pid; our runtime keys state by command id, so
- * resolve one to the other. The recorded pid is consulted first because a
- * finished process no longer appears in the live table.
- */
 async function resolveProcess(id: string, pid: number) {
   const { ref, driver } = await requireLiveSandbox(id);
   const recorded = await store.findCommandByPid(id, pid);
@@ -27,7 +21,6 @@ async function resolveProcess(id: string, pid: number) {
   return { ref, driver, commandId: match.commandId, command: match.command };
 }
 
-/** boat's CommandRecord status, from the row and whatever the guest last said. */
 function commandStatusOf(
   row: { killed: boolean; timedOut: number },
   finished: boolean,
@@ -46,7 +39,6 @@ function commandStatusOf(
   return "exited";
 }
 
-/** boat's CommandRecord, derived from the row plus the guest's live state. */
 export function commandRecord(
   row: {
     id: string;
@@ -86,7 +78,6 @@ export function commandRecord(
   };
 }
 
-/** Throws unless the sandbox can take commands at all. */
 export async function assertRunnable(id: string) {
   const sandbox = await requireSandbox(id);
 
@@ -98,7 +89,6 @@ export async function assertRunnable(id: string) {
   }
 }
 
-/** The synchronous path: run to completion and answer with boat's `command.finished`. */
 export async function runSandboxCommand(
   id: string,
   request: { command: string; cwd?: string; timeoutSeconds: number },
@@ -151,7 +141,6 @@ export async function runSandboxCommand(
   };
 }
 
-/** Launch a command that outlives the request, returning boat's `command.started`. */
 export async function startSandboxProcess(
   id: string,
   request: { command: string; cwd?: string; timeoutSeconds: number },
@@ -228,7 +217,6 @@ function liveStatusOf(state: { running: boolean; known: boolean } | null) {
   return state.known ? ("exited" as const) : ("lost" as const);
 }
 
-/** Full CommandStatusResponse body for GET /commands/{processId}. */
 export async function sandboxCommandStatus(
   id: string,
   processId: string,
@@ -250,8 +238,6 @@ export async function sandboxCommandStatus(
     .catch(() => null);
   const state = await driver.processState(ref, commandId).catch(() => null);
 
-  // Offsets: only what was written since the requested byte position. Otherwise
-  // the tail of both logs, capped by tailBytes.
   let stdoutBytes = output?.stdout ?? new Uint8Array();
   let stderrBytes = output?.stderr ?? new Uint8Array();
   let stdoutOffset = query.stdoutOffset ?? 0;
@@ -306,8 +292,6 @@ export async function killSandboxProcess(id: string, processId: string) {
 
   if (commandId) {
     const existing = await store.commandById(commandId);
-    // A DELETE on something that already ended must not rewrite its history:
-    // it only signals, so the natural exit stays `exited`.
 
     if (signaled || existing?.finishedAt === null) {
       const [output, state] = await Promise.all([
@@ -365,10 +349,6 @@ export async function commandHistoryInfo(sandboxId: string, commandId: string) {
   return commandRecord(await requireCommand(sandboxId, commandId));
 }
 
-/**
- * Read a stored log from a byte offset, at most 1 MiB per call, so a client can
- * page through output that is far larger than one response.
- */
 export async function commandHistoryLogs(
   sandboxId: string,
   commandId: string,

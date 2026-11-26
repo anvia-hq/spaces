@@ -70,16 +70,19 @@ export function FileList({
               )}
             >
               <EntryIcon isDir={entry.isDir} />
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => onOpen(entry)}
                 disabled={busy === `open:${entry.path}`}
-                className="min-w-0 flex-1 truncate text-left text-base text-foreground/90 transition-colors hover:text-primary"
+                className="h-auto min-w-0 flex-1 justify-start gap-0 px-0 py-0 text-left text-base font-normal text-foreground/90 hover:bg-transparent hover:text-primary"
                 title={entry.path}
               >
-                {entry.name}
-                {entry.isDir && <span className="text-muted-foreground">/</span>}
-              </button>
+                <span className="min-w-0 truncate">
+                  {entry.name}
+                  {entry.isDir && <span className="text-muted-foreground">/</span>}
+                </span>
+              </Button>
               <span className="hidden shrink-0 text-base text-muted-foreground/70 sm:inline">
                 {entry.mode}
               </span>

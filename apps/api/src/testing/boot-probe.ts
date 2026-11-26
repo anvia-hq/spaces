@@ -9,13 +9,6 @@ function clientIdOf(provider: SocialProviderConfig): string | null {
   return null;
 }
 
-/**
- * Boots the API once, under the environment its parent test set, and prints
- * what the console and a sign-in attempt observe. Run as a subprocess by
- * `github.test.ts`: `config` and Better Auth are built the first time their
- * modules are imported, so a deployment with different credentials needs a
- * different process rather than a different import specifier.
- */
 async function probe() {
   const me = await app.request("/api/v1/me", { headers: { authorization: "Bearer test_key" } });
   const meBody = (await me.json()) as { principal: { kind: string }; login: { github: boolean } };

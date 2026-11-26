@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -47,7 +48,7 @@ export function RenameRuntimeDialog({
         <DialogHeader>
           <DialogTitle>Rename {runtime.name}</DialogTitle>
         </DialogHeader>
-        <form
+        <Form
           id={`rename-${runtime.id}`}
           className="flex flex-col gap-1.5"
           onSubmit={(event) => {
@@ -70,7 +71,7 @@ export function RenameRuntimeDialog({
             autoFocus
             onChange={(event) => setName(event.target.value)}
           />
-        </form>
+        </Form>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
             Cancel

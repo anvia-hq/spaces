@@ -10,18 +10,6 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 
-/**
- * Storage for the sandbox lifecycle.
- *
- * Timestamps are `timestamptz` in `mode: "date"`: PostgreSQL compares and orders
- * them as time and the driver hands back `Date` objects. They are turned into
- * ISO-8601 strings where they leave the store, because that is what boat's
- * contract expects. (`mode: "string"` looks tempting and is wrong: drizzle
- * formats the UTC clock with the *local* offset, which silently shifts every
- * timestamp by the server's timezone.) JSON columns are `jsonb` so drizzle
- * parses them once, in the store, instead of every caller.
- */
-
 const createdAt = (column: string) => timestamp(column, { withTimezone: true, mode: "date" });
 
 export const runtimes = pgTable(
@@ -41,6 +29,7 @@ export const runtimes = pgTable(
       exec: boolean;
       files: boolean;
       persistence: boolean;
+      networkPolicy?: boolean;
     }>(),
     vcpu: integer("vcpu"),
     memMib: integer("mem_mib"),
@@ -80,7 +69,6 @@ export const sandboxes = pgTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
-    /** Mirrors boat's Sandbox.state enum. */
     state: text("state").notNull(),
     type: text("type").notNull(),
     labels: jsonb("labels").$type<Record<string, string>>().notNull().default({}),
@@ -95,13 +83,17 @@ export const sandboxes = pgTable(
     ttlSeconds: integer("ttl_seconds"),
     snapshotAt: createdAt("snapshot_at"),
     forkOf: text("fork_of"),
-    /** Driver-owned pointer: `vm:<id>`, `disk:<path>` or `snap:<id>`. */
     driverRef: text("driver_ref"),
     hydrated: boolean("hydrated").notNull().default(true),
     hydratedAt: createdAt("hydrated_at"),
-    /** Better Auth user id that owns this sandbox; null for the operator key. */
     ownerId: text("owner_id"),
     runtimeId: text("runtime_id").notNull().default("local"),
+    setupStatus: text("setup_status").$type<"pending" | "running" | "done" | "failed">(),
+    setupError: text("setup_error"),
+    networkPolicy: jsonb("network_policy").$type<{
+      mode: "default" | "open" | "deny" | "allow";
+      allow: string[];
+    }>(),
   },
   (table) => [
     index("sandboxes_state_idx").on(table.state),
@@ -110,20 +102,28 @@ export const sandboxes = pgTable(
   ],
 );
 
+export const idempotencyKeys = pgTable(
+  "idempotency_keys",
+  {
+    key: text("key").primaryKey(),
+    sandboxId: text("sandbox_id").notNull(),
+    createdAt: createdAt("created_at").notNull(),
+    expiresAt: createdAt("expires_at").notNull(),
+  },
+  (table) => [index("idempotency_keys_expires_idx").on(table.expiresAt)],
+);
+
 export const snapshots = pgTable(
   "snapshots",
   {
     id: text("id").primaryKey(),
     sandboxId: text("sandbox_id").notNull(),
     name: text("name"),
-    /** creating | ready | error */
     state: text("state").notNull(),
     createdAt: createdAt("created_at").notNull(),
     sizeBytes: bigint("size_bytes", { mode: "number" }),
     driverRef: text("driver_ref"),
-    /** Cached JSON file listing (SnapshotTreeEntry[]) for /snapshots/{id}/tree. */
     manifest: jsonb("manifest").$type<{ path: string; kind: string; size?: number }[]>(),
-    /** Copied from the sandbox so a snapshot dies with its owner, not with the id. */
     ownerId: text("owner_id"),
     runtimeId: text("runtime_id").notNull().default("local"),
   },
@@ -134,10 +134,8 @@ export const snapshots = pgTable(
   ],
 );
 
-/** A snapshot saved under a user-chosen name; survives the source sandbox. */
 export const savedSnapshots = pgTable("saved_snapshots", {
   name: text("name").primaryKey(),
-  /** saving | ready | failed */
   status: text("status").notNull(),
   error: text("error"),
   sourceSandboxId: text("source_sandbox_id").notNull(),
@@ -148,14 +146,11 @@ export const savedSnapshots = pgTable("saved_snapshots", {
   ownerId: text("owner_id"),
 });
 
-/** Secret codes that let another account deploy a saved snapshot. */
 export const snapshotShares = pgTable(
   "snapshot_shares",
   {
     id: text("id").primaryKey(),
-    /** Saved snapshot name. */
     name: text("name").notNull(),
-    /** Only the hash is kept; the code itself is shown once. */
     codeHash: text("code_hash").notNull(),
     codePrefix: text("code_prefix").notNull(),
     useCount: integer("use_count").notNull().default(0),
@@ -173,11 +168,8 @@ export const commands = pgTable(
     sandboxId: text("sandbox_id").notNull(),
     command: text("command").notNull(),
     cwd: text("cwd"),
-    /** Guest pid for detached commands; also the public `processId`. */
     pid: integer("pid"),
-    /** sync | stream | detached | process — mirrors boat's CommandRecord.mode. */
     mode: text("mode").notNull().default("sync"),
-    /** Set when DELETE /commands/{processId} ended it. */
     killed: boolean("killed").notNull().default(false),
     exitCode: integer("exit_code"),
     stdout: text("stdout").notNull().default(""),
@@ -194,7 +186,6 @@ export const stops = pgTable(
   {
     id: text("id").primaryKey(),
     sandboxId: text("sandbox_id").notNull(),
-    /** pending | failing | completed | superseded */
     status: text("status").notNull().default("pending"),
     requestedAt: createdAt("requested_at"),
     lastAttemptAt: createdAt("last_attempt_at"),
@@ -205,10 +196,6 @@ export const stops = pgTable(
   (table) => [index("stops_sandbox_idx").on(table.sandboxId, table.requestedAt)],
 );
 
-/**
- * Operator-owned machine presets (decision 0034). A retired preset keeps its
- * row so sandboxes already created with it stay readable.
- */
 export const machineSizes = pgTable("machine_sizes", {
   name: text("name").primaryKey(),
   vcpu: integer("vcpu").notNull(),
@@ -220,7 +207,6 @@ export const machineSizes = pgTable("machine_sizes", {
   updatedAt: createdAt("updated_at").notNull(),
 });
 
-/** A guest port published on the host and proxied by the API. */
 export const sandboxPorts = pgTable(
   "sandbox_ports",
   {
@@ -230,15 +216,8 @@ export const sandboxPorts = pgTable(
     hostPort: integer("host_port").notNull(),
     bind: text("bind").notNull(),
     title: text("title"),
-    /** When false the preview URL requires its `_token`. */
     public: boolean("public").notNull().default(false),
-    /** Set when the guest service listens on loopback only. */
     localhost: boolean("localhost").notNull().default(false),
-    /**
-     * True when someone asked for this port through `POST /host`. False for the
-     * ports reserved at create time, which are mapped but not "published" in any
-     * sense the user expressed.
-     */
     explicit: boolean("explicit").notNull().default(false),
     createdAt: createdAt("created_at").notNull(),
   },
@@ -248,26 +227,17 @@ export const sandboxPorts = pgTable(
   ],
 );
 
-/**
- * Append-only record of who did what. Written by one function in the API
- * (modules/audit); there is no update or delete path (decision 0031).
- */
 export const auditLog = pgTable(
   "audit_log",
   {
     id: text("id").primaryKey(),
     at: createdAt("at").notNull(),
-    /** operator | user | system */
     actorKind: text("actor_kind").notNull(),
-    /** user id, api key id, or null for the operator and system work. */
     actorId: text("actor_id"),
-    /** Email, key prefix, or "operator" — what a human should read. */
     actorLabel: text("actor_label"),
-    /** `sandbox.create`, `auth.sign_in`, … */
     action: text("action").notNull(),
     targetType: text("target_type"),
     targetId: text("target_id"),
-    /** ok | error */
     result: text("result").notNull(),
     status: integer("status"),
     errorCode: text("error_code"),
@@ -276,7 +246,6 @@ export const auditLog = pgTable(
     userAgent: text("user_agent"),
     durationMs: integer("duration_ms"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
-    /** Whose log this is; null for operator and system rows. */
     ownerId: text("owner_id"),
   },
   (table) => [
@@ -287,11 +256,6 @@ export const auditLog = pgTable(
   ],
 );
 
-/**
- * One finished span. Written by the OpenTelemetry exporter in modules/traces;
- * the table doubles as the trace store when no collector is configured
- * (decision 0032).
- */
 export const spans = pgTable(
   "spans",
   {
@@ -307,7 +271,6 @@ export const spans = pgTable(
     statusMessage: text("status_message"),
     attributes: jsonb("attributes").$type<Record<string, unknown>>().notNull().default({}),
     requestId: text("request_id"),
-    /** Whose trace this is; null for operator and system work. */
     ownerId: text("owner_id"),
   },
   (table) => [
@@ -322,7 +285,6 @@ export const spans = pgTable(
 export const events = pgTable(
   "events",
   {
-    /** Explicit ids are allowed so an import can preserve them; see the sequence reset in the script. */
     id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     sandboxId: text("sandbox_id").notNull(),
     type: text("type").notNull(),
@@ -345,3 +307,4 @@ export type SpanRow = typeof spans.$inferSelect;
 export type MachineSizeRow = typeof machineSizes.$inferSelect;
 export type RuntimeRow = typeof runtimes.$inferSelect;
 export type RuntimeSampleRow = typeof runtimeSamples.$inferSelect;
+export type IdempotencyKeyRow = typeof idempotencyKeys.$inferSelect;

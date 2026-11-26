@@ -14,6 +14,7 @@ import {
   sql,
   commands,
   events,
+  idempotencyKeys,
   isNull,
   machineSizes,
   sandboxes,
@@ -35,51 +36,59 @@ import {
   type SandboxRow,
   type SavedSnapshotRow,
   type SnapshotRow,
-  type SnapshotShareRow,
   type AuditLogRow,
   type StopRow,
   auditLog,
   type SQL,
 } from "@spaces/db";
-import type { Sandbox, SandboxState, SandboxType } from "@spaces/shared/sandbox";
+import {
+  STATES_STOPPED,
+  type NetworkPolicy,
+  type Sandbox,
+  type SandboxState,
+  type SandboxType,
+  type SetupStatus,
+} from "@spaces/shared/sandbox";
 import { LOCAL_RUNTIME_ID } from "@spaces/shared/runtime";
 import type { RuntimeLoad } from "./modules/runtimes/types.ts";
 import { config } from "./config.ts";
 import { canSee, currentOwnerId, scopedOwner } from "./scope.ts";
 import { tracedStore } from "./modules/traces/proxies.ts";
 
-export type { RuntimeSampleRow, SavedSnapshotRow, SnapshotShareRow } from "@spaces/db";
+export type { RuntimeSampleRow, SavedSnapshotRow } from "@spaces/db";
 
 const handle = createDb(config.databaseUrl);
 export const db = handle.db;
 
-/** Migrations run once, before the first request can reach the store. */
 await handle.migrate();
 
 export type { CommandRow, RuntimeRow, SandboxRow, SnapshotRow };
 
 export const now = () => new Date().toISOString();
 
-/** ISO-8601 on the wire, `Date` in the driver: two helpers, one direction each. */
 export const iso = (value: Date | null): string | null => (value ? value.toISOString() : null);
 
 const at = (value: string | null | undefined): Date | null =>
   value === null || value === undefined ? null : new Date(value);
 
-/** First row of a query, or null — Postgres has no `.get()`. */
 export async function one<T>(query: PromiseLike<T[]>): Promise<T | null> {
   const rows = await query;
   return rows[0] ?? null;
 }
+
+export type SandboxSort = "createdAt:desc" | "createdAt:asc" | "updatedAt:desc";
 
 export interface ListFilter {
   states?: SandboxState[];
   name?: string;
   namePrefix?: string;
   labels?: string[];
+  stoppedBefore?: string;
+  sort?: SandboxSort;
+  limit?: number;
+  cursor?: { at: Date; id: string };
 }
 
-/** DB row -> API shape. `jsonb` columns arrive parsed; nothing to decode here. */
 function toSandbox(row: SandboxRow): Sandbox {
   return {
     id: row.id,
@@ -94,12 +103,13 @@ function toSandbox(row: SandboxRow): Sandbox {
     updatedAt: row.updatedAt.toISOString(),
     stoppedAt: iso(row.stoppedAt),
     archiveAfter: iso(row.archiveAfter),
-    desktopAvailable: false,
-    desktopUrl: null,
     snapshotAvailable: row.snapshotAt !== null,
     snapshotCompletedAt: iso(row.snapshotAt),
     hydrated: row.hydrated,
     hydratedAt: iso(row.hydratedAt),
+    setupStatus: row.setupStatus ?? null,
+    setupError: row.setupError ?? null,
+    network: row.networkPolicy ?? null,
     runtimeId: row.runtimeId,
   };
 }
@@ -117,8 +127,16 @@ const ACTIVE_STATES: SandboxState[] = [
 
 const rawStore = {
   async list(filter: ListFilter = {}): Promise<Sandbox[]> {
-    const where = [];
+    const { sandboxes: items } = await this.listPage(filter);
+    return items;
+  },
+
+  async listPage(
+    filter: ListFilter = {},
+  ): Promise<{ sandboxes: Sandbox[]; nextCursor: string | null }> {
+    const where: SQL[] = [];
     const owner = scopedOwner();
+    const sort: SandboxSort = filter.sort ?? "createdAt:desc";
 
     if (owner) where.push(eq(sandboxes.ownerId, owner));
 
@@ -128,21 +146,63 @@ const rawStore = {
 
     if (filter.namePrefix !== undefined) where.push(like(sandboxes.name, `${filter.namePrefix}%`));
 
-    const rows = await db
-      .select()
-      .from(sandboxes)
-      .where(where.length ? and(...where) : undefined)
-      .orderBy(desc(sandboxes.createdAt));
+    if (filter.stoppedBefore !== undefined) {
+      where.push(
+        inArray(sandboxes.state, STATES_STOPPED),
+        lt(sandboxes.stoppedAt, new Date(filter.stoppedBefore)),
+      );
+    }
 
-    const mapped = rows.map(toSandbox);
-
-    // Label filters are conjunctive: every `key=value` must match.
-    return (filter.labels ?? []).reduce<Sandbox[]>((acc, raw) => {
+    for (const raw of filter.labels ?? []) {
       const idx = raw.indexOf("=");
       const key = idx === -1 ? raw : raw.slice(0, idx);
       const value = idx === -1 ? "" : raw.slice(idx + 1);
-      return acc.filter((row) => row.labels[key!] === value);
-    }, mapped);
+      where.push(sql`${sandboxes.labels} @> ${JSON.stringify({ [key]: value })}::jsonb`);
+    }
+
+    const orderColumn = sort === "updatedAt:desc" ? sandboxes.updatedAt : sandboxes.createdAt;
+    const ascending = sort === "createdAt:asc";
+
+    if (filter.cursor) {
+      const { at: cursorAt, id: cursorId } = filter.cursor;
+      where.push(
+        ascending
+          ? or(
+              gt(orderColumn, cursorAt),
+              and(eq(orderColumn, cursorAt), gt(sandboxes.id, cursorId)),
+            )!
+          : or(
+              lt(orderColumn, cursorAt),
+              and(eq(orderColumn, cursorAt), lt(sandboxes.id, cursorId)),
+            )!,
+      );
+    }
+
+    const query = db
+      .select()
+      .from(sandboxes)
+      .where(where.length ? and(...where) : undefined)
+      .orderBy(
+        ascending ? asc(orderColumn) : desc(orderColumn),
+        ascending ? asc(sandboxes.id) : desc(sandboxes.id),
+      );
+
+    const rows = filter.limit ? await query.limit(filter.limit + 1) : await query;
+    const items = rows.map(toSandbox);
+
+    if (!filter.limit) {
+      return { sandboxes: items, nextCursor: null };
+    }
+
+    const hasMore = items.length > filter.limit;
+    const page = hasMore ? items.slice(0, filter.limit) : items;
+    const tail = page[page.length - 1];
+    const nextCursor =
+      hasMore && tail
+        ? `${sort === "updatedAt:desc" ? tail.updatedAt : tail.createdAt}|${tail.id}`
+        : null;
+
+    return { sandboxes: page, nextCursor };
   },
 
   async get(id: string): Promise<Sandbox | null> {
@@ -166,6 +226,8 @@ const rawStore = {
     archiveAfter: string | null;
     forkOf?: string | null;
     runtimeId?: string;
+    setupStatus?: SetupStatus | null;
+    networkPolicy?: NetworkPolicy | null;
   }) {
     const ts = now();
     await db.insert(sandboxes).values({
@@ -179,6 +241,8 @@ const rawStore = {
       archiveAfter: at(s.archiveAfter),
       forkOf: s.forkOf ?? null,
       runtimeId: s.runtimeId ?? LOCAL_RUNTIME_ID,
+      setupStatus: s.setupStatus ?? null,
+      networkPolicy: s.networkPolicy ?? null,
       ownerId: currentOwnerId(),
       createdAt: at(ts)!,
       updatedAt: at(ts)!,
@@ -196,12 +260,15 @@ const rawStore = {
       url: string | null;
       ip: string | null;
       labels: Record<string, string>;
+      env: Record<string, string>;
       stoppedAt: string | null;
       archiveAfter: string | null;
       snapshotAt: string | null;
       driverRef: string | null;
       hydrated: boolean;
       hydratedAt: string | null;
+      setupStatus: SetupStatus | null;
+      setupError: string | null;
     }>,
   ) {
     const values: {
@@ -213,8 +280,11 @@ const rawStore = {
       url?: string | null;
       ip?: string | null;
       labels?: Record<string, string>;
+      env?: Record<string, string>;
       driverRef?: string | null;
       hydrated?: boolean;
+      setupStatus?: SetupStatus | null;
+      setupError?: string | null;
       updatedAt: Date;
       stoppedAt?: Date | null;
       archiveAfter?: Date | null;
@@ -238,9 +308,15 @@ const rawStore = {
 
     if (patch.labels !== undefined) values.labels = patch.labels;
 
+    if (patch.env !== undefined) values.env = patch.env;
+
     if (patch.driverRef !== undefined) values.driverRef = patch.driverRef;
 
     if (patch.hydrated !== undefined) values.hydrated = patch.hydrated;
+
+    if (patch.setupStatus !== undefined) values.setupStatus = patch.setupStatus;
+
+    if (patch.setupError !== undefined) values.setupError = patch.setupError;
 
     if (patch.stoppedAt !== undefined) values.stoppedAt = at(patch.stoppedAt);
 
@@ -261,8 +337,6 @@ const rawStore = {
     const row = await this.raw(id);
     return row ? row.env : {};
   },
-
-  /* -------------------------------------------------------- machine sizes */
 
   async insertMachineSize(s: {
     name: string;
@@ -325,7 +399,6 @@ const rawStore = {
     await db.update(machineSizes).set(values).where(eq(machineSizes.name, name));
   },
 
-  /** How many sandboxes were created at this size, retired or not. */
   async countOfType(type: string): Promise<number> {
     const rows = await db
       .select({ n: sql<number>`count(*)::int` })
@@ -333,8 +406,6 @@ const rawStore = {
       .where(eq(sandboxes.type, type));
     return Number(rows[0]?.n ?? 0);
   },
-
-  /* ------------------------------------------------------------ snapshots */
 
   async listSnapshots(sandboxId?: string): Promise<SnapshotRow[]> {
     const owner = scopedOwner();
@@ -380,8 +451,6 @@ const rawStore = {
     await db.delete(snapshots).where(eq(snapshots.id, id));
   },
 
-  /* ------------------------------------------------------------- commands */
-
   async insertCommand(c: {
     id: string;
     sandboxId: string;
@@ -402,7 +471,6 @@ const rawStore = {
     });
   },
 
-  /** Public id alias for the command record. */
   async commandById(id: string): Promise<CommandRow | null> {
     const row = await one(db.select().from(commands).where(eq(commands.id, id)));
     return row && (await this.raw(row.sandboxId)) ? row : null;
@@ -412,7 +480,6 @@ const rawStore = {
     await db.update(commands).set({ killed: true }).where(eq(commands.id, id));
   },
 
-  /** Resolve a public `processId` (guest pid) to its command record. */
   async findCommandByPid(sandboxId: string, pid: number): Promise<CommandRow | null> {
     if (!(await this.raw(sandboxId))) return null;
 
@@ -462,8 +529,6 @@ const rawStore = {
     const row = await one(db.select().from(commands).where(eq(commands.id, id)));
     return row && (await this.raw(row.sandboxId)) ? row : null;
   },
-
-  /* --------------------------------------------------------- ports */
 
   async insertPort(r: {
     id: string;
@@ -532,8 +597,6 @@ const rawStore = {
     );
     return row?.runtimeId ?? null;
   },
-
-  /* ------------------------------------------------------------- runtimes */
 
   async listRuntimes(): Promise<RuntimeRow[]> {
     return db.select().from(runtimes).orderBy(asc(runtimes.name));
@@ -728,8 +791,6 @@ const rawStore = {
     await db.delete(sandboxPorts).where(eq(sandboxPorts.sandboxId, sandboxId));
   },
 
-  /* ------------------------------------------------------ saved snapshots */
-
   async upsertSavedSnapshot(r: {
     name: string;
     status: "saving" | "ready" | "failed";
@@ -784,7 +845,6 @@ const rawStore = {
     return scoped.orderBy(desc(savedSnapshots.createdAt));
   },
 
-  /** The owner of a saved name, ignoring scope: names are unique server-wide. */
   async savedSnapshotOwner(name: string): Promise<string | null | undefined> {
     const row = await one(
       db
@@ -804,7 +864,6 @@ const rawStore = {
     await db.delete(savedSnapshots).where(eq(savedSnapshots.name, name));
   },
 
-  /** Saved snapshots that pointed at an artifact that no longer exists. */
   async deleteSavedSnapshotsBySnapshotId(snapshotId: string): Promise<string[]> {
     const rows = await db
       .select()
@@ -826,42 +885,112 @@ const rawStore = {
     await db.update(snapshots).set({ manifest }).where(eq(snapshots.id, snapshotId));
   },
 
-  /* ---------------------------------------------------------- snapshot shares */
+  async getIdempotencyKey(key: string): Promise<string | null> {
+    const row = await one(
+      db
+        .select({ sandboxId: idempotencyKeys.sandboxId, expiresAt: idempotencyKeys.expiresAt })
+        .from(idempotencyKeys)
+        .where(eq(idempotencyKeys.key, key)),
+    );
 
-  async insertShare(r: {
-    id: string;
-    name: string;
-    codeHash: string;
-    codePrefix: string;
-    createdAt: string;
-  }) {
-    await db.insert(snapshotShares).values({ ...r, createdAt: at(r.createdAt)! });
+    if (!row || row.expiresAt.getTime() <= Date.now()) return null;
+
+    return row.sandboxId;
   },
 
-  async listShares(name: string): Promise<SnapshotShareRow[]> {
-    return db
-      .select()
-      .from(snapshotShares)
-      .where(eq(snapshotShares.name, name))
-      .orderBy(desc(snapshotShares.createdAt));
-  },
-
-  async getShare(id: string): Promise<SnapshotShareRow | null> {
-    return one(db.select().from(snapshotShares).where(eq(snapshotShares.id, id)));
-  },
-
-  async revokeShare(id: string, at_: string) {
+  async putIdempotencyKey(key: string, sandboxId: string, expiresAt: Date) {
     await db
-      .update(snapshotShares)
-      .set({ revokedAt: at(at_) })
-      .where(eq(snapshotShares.id, id));
+      .insert(idempotencyKeys)
+      .values({ key, sandboxId, createdAt: new Date(), expiresAt })
+      .onConflictDoUpdate({
+        target: idempotencyKeys.key,
+        set: { sandboxId, expiresAt },
+      });
   },
 
-  async deleteSharesOf(name: string) {
-    await db.delete(snapshotShares).where(eq(snapshotShares.name, name));
+  async insertSandboxIdempotent(
+    key: string,
+    expiresAt: Date,
+    s: {
+      id: string;
+      name: string;
+      state: SandboxState;
+      type: SandboxType;
+      labels?: Record<string, string>;
+      env?: Record<string, string>;
+      ttlSeconds?: number | null;
+      archiveAfter?: string | null;
+      forkOf?: string | null;
+      driverRef?: string | null;
+      hydrated?: boolean;
+      runtimeId?: string;
+      setupStatus?: SetupStatus | null;
+      setupError?: string | null;
+      networkPolicy?: NetworkPolicy | null;
+    },
+  ): Promise<{ created: true } | { created: false; sandbox: Sandbox }> {
+    const ownerId = currentOwnerId();
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${key}))`);
+      const existingKey = await one(
+        tx
+          .select({ sandboxId: idempotencyKeys.sandboxId, expiresAt: idempotencyKeys.expiresAt })
+          .from(idempotencyKeys)
+          .where(eq(idempotencyKeys.key, key)),
+      );
+
+      if (existingKey && existingKey.expiresAt.getTime() > Date.now()) {
+        const existingRow = await one(
+          tx.select().from(sandboxes).where(eq(sandboxes.id, existingKey.sandboxId)),
+        );
+
+        if (existingRow && canSee(existingRow.ownerId)) {
+          return { created: false as const, sandbox: toSandbox(existingRow) };
+        }
+      }
+
+      const timestamp = new Date();
+      await tx.insert(sandboxes).values({
+        id: s.id,
+        name: s.name,
+        state: s.state,
+        type: s.type,
+        labels: s.labels ?? {},
+        env: s.env ?? {},
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        archiveAfter: at(s.archiveAfter),
+        ttlSeconds: s.ttlSeconds ?? null,
+        forkOf: s.forkOf ?? null,
+        driverRef: s.driverRef ?? null,
+        hydrated: s.hydrated ?? true,
+        ownerId,
+        runtimeId: s.runtimeId ?? LOCAL_RUNTIME_ID,
+        setupStatus: s.setupStatus ?? null,
+        setupError: s.setupError ?? null,
+        networkPolicy: s.networkPolicy ?? null,
+      });
+
+      await tx
+        .insert(idempotencyKeys)
+        .values({ key, sandboxId: s.id, createdAt: timestamp, expiresAt })
+        .onConflictDoUpdate({
+          target: idempotencyKeys.key,
+          set: { sandboxId: s.id, expiresAt },
+        });
+
+      return { created: true as const };
+    });
   },
 
-  /* ---------------------------------------------------------------- stops */
+  async sweepIdempotencyKeys(cutoff: Date): Promise<number> {
+    const rows = await db
+      .delete(idempotencyKeys)
+      .where(lt(idempotencyKeys.expiresAt, cutoff))
+      .returning({ key: idempotencyKeys.key });
+
+    return rows.length;
+  },
 
   async insertStop(s2: {
     id: string;
@@ -914,7 +1043,6 @@ const rawStore = {
     return one(db.select().from(stops).where(eq(stops.id, id)));
   },
 
-  /** Most recent stop id for a sandbox, completed or not. */
   async lastStopId(sandboxId: string): Promise<string | null> {
     const row = await one(
       db
@@ -926,7 +1054,6 @@ const rawStore = {
     return row?.id ?? null;
   },
 
-  /** The stop currently in flight for a sandbox, if any. */
   async pendingStop(sandboxId: string): Promise<StopRow | null> {
     return one(
       db
@@ -937,14 +1064,11 @@ const rawStore = {
     );
   },
 
-  /** Every event of a sandbox, oldest first — the usage meter walks these. */
   async allEvents(sandboxId: string): Promise<EventRow[]> {
     if (!(await this.raw(sandboxId))) return [];
 
     return db.select().from(events).where(eq(events.sandboxId, sandboxId)).orderBy(asc(events.id));
   },
-
-  /* --------------------------------------------------------------- events */
 
   async event(sandboxId: string, type: string, payload: Record<string, unknown> = {}) {
     await db.insert(events).values({ sandboxId, type, payload, at: at(now())! });
@@ -990,8 +1114,6 @@ const rawStore = {
     };
   },
 
-  /* ----------------------------------------------------------------- spans */
-
   async insertSpans(
     spans: {
       traceId: string;
@@ -1020,7 +1142,6 @@ const rawStore = {
     );
   },
 
-  /** Recent traces: one row per trace id, with its root span's shape. */
   async listTraces(
     filter: { traceId?: string; requestId?: string; name?: string; status?: "ok" | "error" },
     limit: number,
@@ -1068,8 +1189,6 @@ const rawStore = {
         rootName: root.name,
         route: typeof route === "string" ? route : null,
         method: typeof method === "string" ? method : null,
-        // The request's own outcome, not a swallowed child failure: a mock
-        // driver refusing port publishing is not a failed request.
         status: (http ?? root).statusCode === "error" ? "error" : "ok",
         requestId: root.requestId,
         spanCount: group.length,
@@ -1109,7 +1228,6 @@ const rawStore = {
     }));
   },
 
-  /** Request rate, error rate, latency percentiles and lifecycle durations. */
   async traceMetrics(windowMinutes: number) {
     const owner = scopedOwner();
     const since = new Date(Date.now() - windowMinutes * 60_000);
@@ -1155,7 +1273,6 @@ const rawStore = {
     };
   },
 
-  /** Retention: spans older than the cutoff, oldest first, in batches. */
   async sweepSpans(olderThan: string): Promise<number> {
     const rows = await db
       .delete(spans_)
@@ -1164,8 +1281,6 @@ const rawStore = {
 
     return rows.length;
   },
-
-  /* ------------------------------------------------------------- audit log */
 
   async insertAudit(row: {
     id: string;
@@ -1238,7 +1353,6 @@ const rawStore = {
       .limit(limit);
   },
 
-  /** Distinct actions seen, newest first — the console's filter options. */
   async auditActions(): Promise<string[]> {
     const owner = scopedOwner();
     const rows = await db
@@ -1248,12 +1362,10 @@ const rawStore = {
     return rows.map((row) => row.action).sort();
   },
 
-  /** Host capacity, deliberately not scoped: the limit protects this machine. */
   async totalSandboxes(): Promise<number> {
     const rows = await db.select({ n: sql<number>`count(*)::int` }).from(sandboxes);
     return Number(rows[0]?.n ?? 0);
   },
 };
 
-/** Every store method runs inside its own span (decision 0032). */
 export const store = tracedStore(rawStore);

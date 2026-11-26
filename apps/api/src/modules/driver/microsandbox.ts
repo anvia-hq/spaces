@@ -1,4 +1,9 @@
 import { SANDBOX_WORKDIR } from "@spaces/shared/files";
+import {
+  classifyNetworkEntry,
+  isPrivateIpOrCidr,
+  type NetworkPolicy,
+} from "@spaces/shared/sandbox";
 import { config } from "../../config.ts";
 import type { FileEntry, FileMatch } from "@spaces/shared/files";
 import type {
@@ -16,36 +21,19 @@ import { isLocalHost, parseKeyValues, runRemote } from "./ssh.ts";
 import { closeTunnel, tunnelFor } from "./tunnel.ts";
 
 export interface MicrosandboxDriverOptions {
-  /** SSH destination of the host running `msb`, or `local`. */
   host: string;
-  /** Path to the msb binary. `~` expands on both local and remote transports. */
   msbPath?: string;
-  /** OCI image used for new sandboxes. */
   image?: string;
   timeoutMs?: number;
 }
 
-/** msb status values that mean the guest is up. */
 const RUNNING_STATES = new Set(["Running", "Started", "Ready"]);
 
-/**
- * The sandbox user, as boat defines it.
- *
- * Commands used to run as root with `HOME=/root`, and `/home/user` was
- * root-owned, so files the API wrote were not the user's and anything that
- * cared about uid (package managers, npm, git) behaved differently from boat.
- */
 const GUEST_USER = "user";
 const GUEST_UID = 1000;
 const GUEST_GID = 1000;
 const GUEST_HOME = SANDBOX_WORKDIR;
 
-/**
- * Create the sandbox user and take ownership of the work directory.
- *
- * Idempotent, and run on create and resume: images differ in whether they ship
- * `adduser` (Alpine) or `useradd` (Ubuntu), and a restored disk may predate this.
- */
 const GUEST_INIT = `
 mkdir -p ${sq(GUEST_HOME)} || exit 9
 if ! id -u ${sq(GUEST_USER)} >/dev/null 2>&1; then
@@ -67,13 +55,6 @@ chmod 1777 /tmp 2>/dev/null || true
 exit 0
 `;
 
-/**
- * Run a script as the sandbox user.
- *
- * `msb exec` has no uid flag, so the drop happens inside the guest. Arguments
- * are folded into the script (`set -- ...`) rather than forwarded, because
- * neither `setpriv` nor `su -c` has a reliable way to pass positionals.
- */
 const AS_GUEST_USER = `
 s=$1
 if [ "$(id -u)" = 0 ] && id -u ${GUEST_USER} >/dev/null 2>&1; then
@@ -91,19 +72,9 @@ if [ "$(id -u)" = 0 ] && id -u ${GUEST_USER} >/dev/null 2>&1; then
 fi
 exec sh -c "$s"
 `;
-/**
- * Driver backed by [microsandbox](https://github.com/superradcompany/microsandbox)
- * (`msb`), which runs microVMs on libkrun.
- *
- * Lifecycle maps directly onto msb: `create` boots from an OCI image,
- * `stop`/`resume` are msb stop/start, `fork` uses msb's copy-on-write
- * child sandboxes, and `restore` boots a snapshot's disk into a new sandbox.
- * File operations ride on `msb exec`, so they work identically whether msb
- * runs locally or over SSH.
- */
 export class MicrosandboxDriver implements SandboxDriver {
   readonly kind = "microsandbox";
-  readonly capabilities = { exec: true, files: true, persistence: true };
+  readonly capabilities = { exec: true, files: true, persistence: true, networkPolicy: true };
 
   private readonly host: string;
   private readonly msb: string;
@@ -117,7 +88,6 @@ export class MicrosandboxDriver implements SandboxDriver {
     this.timeoutMs = options.timeoutMs ?? 120_000;
   }
 
-  /** Run an msb subcommand, returning stdout. Throws on non-zero exit. */
   private async msbRun(args: string[], timeoutMs = this.timeoutMs, stdin?: Uint8Array | string) {
     const options: { timeoutMs: number; stdin?: Uint8Array | string } = { timeoutMs };
 
@@ -146,21 +116,14 @@ export class MicrosandboxDriver implements SandboxDriver {
     return { cpus: String(size.vcpu), memory: `${size.memMib}M` };
   }
 
-  /** Refs are `msb:<name>` / `snap:<group>:<name>`; the name is the sandbox id. */
   private nameOf(ref: string): string {
     return ref.startsWith("msb:") ? ref.slice(4) : ref;
   }
 
-  /** `msb restore` takes a `group:member` selector, not our `snap:` scheme. */
   private snapshotSelector(ref: string): string {
     return ref.startsWith("snap:") ? ref.slice(5) : ref;
   }
 
-  /**
-   * Run a POSIX shell snippet inside the guest, with `args` bound to `$1..$n`.
-   * Everything file-related funnels through here so local and remote behave
-   * identically and no host temp files are needed.
-   */
   private async guest(
     ref: string,
     script: string,
@@ -172,8 +135,6 @@ export class MicrosandboxDriver implements SandboxDriver {
     } = {},
   ) {
     const name = this.nameOf(ref);
-    // Positionals are prelude, not argv: the privilege wrapper re-execs the
-    // script and cannot carry them.
     const body = args.length ? `set -- ${args.map(sq).join(" ")}\n${script}` : script;
     const prefix = [this.msb, "exec", name, "--", "sh", "-c"];
     const argv =
@@ -189,8 +150,6 @@ export class MicrosandboxDriver implements SandboxDriver {
     return runRemote(this.host, argv, runOptions);
   }
 
-  /* ------------------------------------------------------------ lifecycle */
-
   async create(o: CreateOptions): Promise<DriverHandle> {
     const { cpus, memory } = this.spec(o.size);
     const rootDisk = rootDiskArgsFor(o.size);
@@ -203,31 +162,23 @@ export class MicrosandboxDriver implements SandboxDriver {
       "-m",
       memory,
       ...rootDisk,
-      ...this.networkArgs(),
+      ...this.networkArgs(o.network),
       ...this.portArgs(o.ports ?? []),
       "--replace",
       "--quiet",
       this.image,
     ]);
-    // Fresh OCI images ship no /home/user and no sandbox user. Boat treats the
-    // directory as the work directory and runs everything as `user`, so both
-    // have to exist before anything else touches the guest.
     await this.guest(`msb:${o.sandboxId}`, GUEST_INIT, [], { runAs: "root" }).catch(() => {});
     return { ref: `msb:${o.sandboxId}`, url: null, ip: await this.guestIp(o.sandboxId) };
   }
 
   async resume(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
-    // msb keeps stopped sandboxes on disk; starting one restores its disk and
-    // its configuration, so the network device and port mappings come back.
     await this.msbRun(["start", this.nameOf(o.fromRef)]);
     await this.guest(`msb:${o.sandboxId}`, GUEST_INIT, [], { runAs: "root" }).catch(() => {});
     return { ref: `msb:${o.sandboxId}`, url: null, ip: await this.guestIp(o.sandboxId) };
   }
 
-  async fork(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
-    // `msb fork` copies the parent's configuration, network device included.
-    // The child still needs its own host ports, or two sandboxes would fight
-    // over the same ones.
+  async fork(o: Omit<CreateOptions, "network"> & { fromRef: string }): Promise<DriverHandle> {
     await this.msbRun([
       "fork",
       this.nameOf(o.fromRef),
@@ -251,6 +202,7 @@ export class MicrosandboxDriver implements SandboxDriver {
           cpus,
           "-m",
           memory,
+          ...this.restoreNetworkArgs(o.network),
           ...this.portArgs(o.ports ?? []),
         ],
         this.timeoutMs,
@@ -279,9 +231,6 @@ export class MicrosandboxDriver implements SandboxDriver {
   }
 
   async snapshot(sandboxId: string, snapshotId: string) {
-    // `msb snapshot create` occasionally fails while the guest is still
-    // settling after boot. One retry turns that into a non-event; the second
-    // failure is real and propagates.
     try {
       await this.msbRun(["snapshot", "create", "--sandbox", sandboxId, snapshotId]);
     } catch {
@@ -310,15 +259,11 @@ export class MicrosandboxDriver implements SandboxDriver {
     }
   }
 
-  /* ----------------------------------------------------------------- exec */
-
   async exec(ref: string, request: ExecRequest): Promise<ExecResult> {
     const name = this.nameOf(ref);
     const startedAt = new Date().toISOString();
     const started = Date.now();
 
-    // msb has no cwd flag. Default to the sandbox work directory so relative
-    // paths behave the same here as they do for the file endpoints.
     const script = `cd ${sq(request.cwd ?? GUEST_HOME)} && ${request.command}`;
     const args = request.args ?? [];
     const body = args.length ? `set -- ${args.map(sq).join(" ")}\n${script}` : script;
@@ -354,27 +299,30 @@ export class MicrosandboxDriver implements SandboxDriver {
     };
   }
 
-  /**
-   * Guest networking flags. Without these the guest boots with no network
-   * device at all, which is why SSH, package installs and port publishing were
-   * unreachable.
-   */
-  private networkArgs(): string[] {
+  private networkArgs(policy?: NetworkPolicy): string[] {
     return networkArgsFor({
       profile: config.netProfile,
       rules: config.netRules,
       defaultEgress: config.netDefaultEgress,
       defaultIngress: config.netDefaultIngress,
       dns: config.netDns,
+      policy,
     });
   }
 
-  /** `-p` arguments for create-time port mappings. */
+  private restoreNetworkArgs(policy?: NetworkPolicy): string[] {
+    return restoreNetworkArgsFor({
+      profile: config.netProfile,
+      rules: config.netRules,
+      defaultEgress: config.netDefaultEgress,
+      policy,
+    });
+  }
+
   private portArgs(ports: PortMapping[]): string[] {
     return ports.flatMap((port) => ["-p", `${port.bind}:${port.hostPort}:${port.guestPort}`]);
   }
 
-  /** IPv4 address of the guest, or null when it has no network device. */
   async guestIp(sandboxId: string): Promise<string | null> {
     try {
       const stdout = await this.fileGuest(
@@ -389,17 +337,11 @@ export class MicrosandboxDriver implements SandboxDriver {
     }
   }
 
-  /**
-   * Publish a guest port on the host. `msb modify` adds the mapping to a running
-   * sandbox, so a port can be exposed long after create.
-   */
   async publishPort(
     sandboxId: string,
     mapping: { bind: string; hostPort: number; guestPort: number },
     mode: "restart" | "next-start" = "restart",
   ): Promise<void> {
-    // msb refuses to change ports on a running microVM without saying how to
-    // apply them: `--restart` applies now, `--next-start` waits for the boot.
     await this.msbRun([
       "modify",
       sandboxId,
@@ -490,19 +432,10 @@ export class MicrosandboxDriver implements SandboxDriver {
     };
   }
 
-  /** Power-cycle: the disk survives, which is what a microVM restart gives us. */
   async restart(sandboxId: string): Promise<void> {
     await this.msbRun(["restart", sandboxId]);
   }
 
-  /**
-   * Boot a throwaway sandbox from a snapshot so its files can be read.
-   *
-   * `msb restore` takes a `group:member` selector and needs no checkpoint state
-   * for a disk snapshot (passing `--disk-only` is actually rejected for those).
-   * Our refs are `snap:<group>:<member>`, so the selector is the ref minus the
-   * scheme.
-   */
   async restoreTemporary(fromRef: string, name: string): Promise<{ ref: string }> {
     await this.msbRun(["restore", this.snapshotSelector(fromRef), "--name", name], this.timeoutMs);
     return { ref: `msb:${name}` };
@@ -512,10 +445,6 @@ export class MicrosandboxDriver implements SandboxDriver {
     await this.msbRun(["rm", this.nameOf(ref), "--force"]).catch(() => {});
   }
 
-  /**
-   * Flat listing of a directory inside a restored snapshot. Paths come back
-   * relative to `root`; `limit` caps the walk so a huge tree cannot hang it.
-   */
   async listSnapshotTree(
     ref: string,
     root: string,
@@ -549,7 +478,6 @@ done`;
     return entries;
   }
 
-  /** File bytes, or the subtree as a tar, for one path inside a snapshot. */
   async readSnapshotEntry(
     ref: string,
     path: string,
@@ -577,19 +505,8 @@ if [ -d "$t" ]; then echo "KIND=dir"; else echo "KIND=file"; fi`,
     return { kind: "file", bytes: decodeBase64(stdout) };
   }
 
-  /* ------------------------------------------------------------- processes */
-
-  /** Root of the guest-side process runtime. Under /tmp so it is always writable. */
   private static readonly PROC_DIR = "/tmp/.spaces/proc";
 
-  /**
-   * Start a background process in the guest.
-   *
-   * A plain `cmd &` does not work: `msb exec` waits for its children (measured
-   * ~5 s for a 5 s child), so the process is launched through `setsid` with all
-   * three descriptors detached. That returns in tens of milliseconds and lets
-   * the child outlive the exec.
-   */
   async startProcess(
     ref: string,
     options: { processId: string; command: string; cwd: string; timeoutSeconds: number },
@@ -663,10 +580,6 @@ echo "STATE=lost"`;
     };
   }
 
-  /**
-   * SIGTERM to the process group, SIGKILL whatever is left after the grace
-   * period. Matching boat: the whole group, 5 s of grace.
-   */
   async killProcess(
     ref: string,
     processId: string,
@@ -694,10 +607,6 @@ echo "SIGNALED=$sig"`;
     return { signaled: out.SIGNALED === "1" };
   }
 
-  /**
-   * Read stdout/stderr as raw bytes, optionally from a byte offset.
-   * Offsets let a polling client ask only for what is new.
-   */
   async readProcessOutput(
     ref: string,
     processId: string,
@@ -726,7 +635,6 @@ fi`;
       return decodeBase64(raw);
     };
 
-    // Independent reads, so they overlap instead of costing two round trips.
     const [stdout, stderr] = await Promise.all([
       readOne("out", stdoutOffset),
       readOne("err", stderrOffset),
@@ -750,8 +658,6 @@ fi`;
       commandId: string | null;
     }[]
   > {
-    // Two separate calls joined here: mixing a process table and a marker line in
-    // one script makes the parse depend on marker framing, which is brittle.
     const [table, trackedRaw] = await Promise.all([
       this.fileGuest(
         ref,
@@ -809,13 +715,6 @@ done`,
     return processes;
   }
 
-  /* ---------------------------------------------------------------- files */
-
-  /**
-   * Canonicalise a path *inside the guest*, resolving symlinks for every part
-   * that exists. The host-side check is lexical, so without this a symlink in
-   * the sandbox could point outside the allowed trees.
-   */
   private static readonly CANON = [
     "canon() {",
     '  c="${1%/}"',
@@ -831,14 +730,6 @@ done`,
     "}",
   ].join("\n");
 
-  /**
-   * Build a guest script whose path arguments are canonicalised and root-checked.
-   *
-   * `resolveLeaf: false` canonicalises only the parent and re-attaches the last
-   * component, so symlinks are operated on as links rather than followed. Boat
-   * requires that for `info`, `delete` and `move` ("a symlink is deleted itself,
-   * never its target").
-   */
   private guarded(
     body: string,
     guards: { arg: string; as: string; resolveLeaf?: boolean }[],
@@ -904,7 +795,6 @@ ${body}`;
   }
 
   async listFiles(ref: string, path: string): Promise<FileEntry[]> {
-    // NUL-framed so filenames containing tabs or newlines survive intact.
     const script = this.guarded(
       `[ -d "$p" ] || { echo ENOTDIR >&2; exit 3; }
 find "$p" -mindepth 1 -maxdepth 1 -print0 2>/dev/null | while IFS= read -r -d "" e; do
@@ -970,8 +860,6 @@ printf '%s\\0%s\\0%s\\0%s\\0' "$k" "$s" "$m" "$t"`,
   }
 
   async setPermissions(ref: string, path: string, mode: string): Promise<void> {
-    // Operate on the path as given (parent guarded); chmod semantics follow symlinks,
-    // which matches POSIX and boat's "ownership does not change" note.
     const script = this.guarded('chmod "$2" "$p" || { echo "EPERM" >&2; exit 9; }', [
       { arg: "$1", as: "p", resolveLeaf: false },
     ]);
@@ -1023,7 +911,6 @@ rm -rf -- "$p"`,
     pattern: string,
     options: { ignoreCase: boolean; maxResults: number },
   ): Promise<{ matches: FileMatch[]; truncated: boolean }> {
-    // grep -F keeps the pattern literal; boat treats it as plain text.
     const flags = options.ignoreCase ? "-rniF" : "-rnF";
     const script = this.guarded(
       `[ -d "$p" ] || { echo ENOTDIR >&2; exit 3; }
@@ -1057,7 +944,6 @@ grep ${flags} -e "$2" "$p" 2>/dev/null || true`,
   }
 }
 
-/** Shape of one entry from `msb snapshot list --format json`. */
 interface MsbSnapshot {
   group?: string;
   name?: string;
@@ -1069,23 +955,106 @@ function joinPath(dir: string, name: string): string {
   return dir.endsWith("/") ? `${dir}${name}` : `${dir}/${name}`;
 }
 
-/** stat reports "644"; boat reports "0644". */
 function padMode(mode: string): string {
   const digits = mode.replace(/[^0-7]/g, "").slice(-4);
   return digits.padStart(4, "0");
 }
 
-/** Quote a path for the guest shell. */
-/**
- * Map the documented networking settings onto msb flags.
- *
- * Pure and exported so the mapping can be tested without a hypervisor: `public`
- * is a *profile* (public addresses only, private denied), `all` is a terminal
- * policy, and `none` means no network device at all. Explicit rules are passed
- * through in order, because msb gives them precedence over the profile.
- */
 export function rootDiskArgsFor(size: CreateOptions["size"]) {
   return ["--root-disk", `${size.diskGb}G`];
+}
+
+function allowRulesFor(entries: string[]): { rules: string[]; needsDns: boolean } {
+  const rules: string[] = [];
+  let needsDns = false;
+
+  for (const raw of entries) {
+    const entry = raw.trim().toLowerCase();
+    const kind = classifyNetworkEntry(entry);
+
+    if (kind === "domain") {
+      needsDns = true;
+      rules.push(`allow@${entry}:tcp:443`, `allow@${entry}:tcp:80`);
+    } else if (kind === "ip") {
+      if (isPrivateIpOrCidr(entry)) {
+        throw new DriverFailure(`private or reserved IP/CIDR '${entry}' is not allowed`);
+      }
+
+      const target = entry.includes(":") ? `[${entry}]` : entry;
+      rules.push(`allow@${target}`);
+    } else {
+      throw new DriverFailure(`invalid network allow entry '${entry}'`);
+    }
+  }
+
+  return { rules, needsDns };
+}
+
+export function restoreNetworkArgsFor(o: {
+  profile: string;
+  rules: string[];
+  defaultEgress: string;
+  policy?: NetworkPolicy;
+}): string[] {
+  if (o.policy && o.policy.mode !== "default") {
+    if (o.policy.mode === "deny") return ["--no-net"];
+
+    if (o.policy.mode === "open") {
+      return [
+        "--net-default",
+        "deny",
+        "--net-rule",
+        "allow:ingress@private",
+        "--net-rule",
+        "allow:ingress@public",
+        "--net-rule",
+        "allow@public",
+        "--net-rule",
+        "allow@dns",
+      ];
+    }
+
+    const { rules, needsDns } = allowRulesFor(o.policy.allow);
+    const args = [
+      "--net-default",
+      "deny",
+      "--net-rule",
+      "allow:ingress@private",
+      "--net-rule",
+      "allow:ingress@public",
+    ];
+
+    if (needsDns) args.push("--net-rule", "allow@dns");
+
+    for (const rule of rules) args.push("--net-rule", rule);
+
+    return args;
+  }
+
+  const profile = o.profile.trim();
+
+  if (!profile || profile === "none") return ["--no-net"];
+
+  if (profile === "all") {
+    const args = ["--net-default", o.defaultEgress === "deny" ? "deny" : "allow"];
+    for (const rule of o.rules) args.push("--net-rule", rule);
+    return args;
+  }
+
+  const args = [
+    "--net-default",
+    "deny",
+    "--net-rule",
+    "allow:ingress@private",
+    "--net-rule",
+    "allow:ingress@public",
+    "--net-rule",
+    "allow@public",
+    "--net-rule",
+    "allow@dns",
+  ];
+  for (const rule of o.rules) args.push("--net-rule", rule);
+  return args;
 }
 
 export function networkArgsFor(o: {
@@ -1094,7 +1063,33 @@ export function networkArgsFor(o: {
   defaultEgress: string;
   defaultIngress: string;
   dns: string;
+  policy?: NetworkPolicy;
 }): string[] {
+  if (o.policy && o.policy.mode !== "default") {
+    if (o.policy.mode === "deny") return ["--no-net"];
+
+    if (o.policy.mode === "open") {
+      const args = ["--net", "public"];
+
+      if (o.dns) args.push("--dns-nameserver", o.dns);
+
+      return args;
+    }
+
+    const { rules, needsDns } = allowRulesFor(o.policy.allow);
+    const args = ["--net-default-egress", "deny", "--net-default-ingress", "allow"];
+
+    if (needsDns) {
+      args.push("--net-rule", "allow@dns");
+
+      if (o.dns) args.push("--dns-nameserver", o.dns);
+    }
+
+    for (const rule of rules) args.push("--net-rule", rule);
+
+    return args;
+  }
+
   const profile = o.profile.trim();
 
   if (!profile || profile === "none") return ["--no-net"];

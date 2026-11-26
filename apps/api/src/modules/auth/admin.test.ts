@@ -1,12 +1,3 @@
-/**
- * An admin is an account with a role, not a second shared secret.
- *
- * Runs on the mock driver like the rest of the suite. What matters: the
- * bootstrap list promotes a listed address once and the role survives a new
- * session, an admin changes what only the operator could, a key carries its
- * owner's role, the last admin cannot be demoted or banned, and the operator key
- * answers exactly as it did before (docs/decision/0037).
- */
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 
@@ -43,10 +34,6 @@ async function call(method: string, path: string, options: Options = {}) {
   });
 }
 
-/**
- * `SPACES_ADMIN_EMAILS` is read once, when `config` is built, so a test writes
- * the list itself. Put back what was there: the next file sees the same config.
- */
 async function withListed(emails: string[], body: () => Promise<void>) {
   config.adminEmails.push(...emails);
 
@@ -289,10 +276,4 @@ describe("the operator key is unaffected", () => {
     expect((await createSize({ token: OPERATOR }, "operator-picked")).status).toBe(201);
     expect((await call("GET", "/api/v1/users", { token: OPERATOR })).status).toBe(200);
   });
-
-  /**
-   * No sandbox fixture here on purpose: the suite shares one database and its
-   * other files fill the deployment limit, so creating one from this file makes
-   * them fail. `scope.ts` is covered by `machine-sizes/sandbox-presets.test.ts`.
-   */
 });

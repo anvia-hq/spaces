@@ -186,7 +186,6 @@ afterEach(async () => {
 
   await runInScope(operatorScope, async () => {
     for (const name of trackedSavedNames.splice(0).reverse()) {
-      await store.deleteSharesOf(name);
       await store.deleteSavedSnapshot(name);
     }
 
@@ -257,16 +256,11 @@ describe("creating a sandbox from a saved snapshot", () => {
     expect(await sandboxCount()).toBe(before);
   });
 
-  test("a share code is not a create source", async () => {
-    const sourceId = await readySandbox();
-    const name = unique("shared");
-    await saveSnapshot(sourceId, name);
-    const share = await call("POST", `/api/v1/saved-snapshots/${name}/shares`);
-    expect(share.status).toBe(201);
-    const { shareCode } = (await share.json()) as { shareCode: string };
-
+  test("a share code string is not a create source", async () => {
     const before = await sandboxCount();
-    const res = await call("POST", "/api/v1/sandboxes", { json: { from: shareCode } });
+    const res = await call("POST", "/api/v1/sandboxes", {
+      json: { from: "bsh_0123456789abcdef0123456789abcdef" },
+    });
     expect(res.status).toBe(404);
     const body = (await res.json()) as { code: string; message: string };
     expect(body.code).toBe("not_found");

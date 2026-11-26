@@ -14,10 +14,6 @@ import { stopSandbox } from "./modules/sandboxes/service.ts";
 import { promoteListedAtBoot, promotionEntry } from "./modules/auth/admins.ts";
 import * as audit from "./modules/audit/service.ts";
 
-/**
- * Auto-stop: boat archives a sandbox when its TTL lapses. Every sweep stops the
- * machine so it stops consuming host resources, and leaves the disk for resume.
- */
 async function reap() {
   const now = Date.now();
   const due = (await store.list()).filter((sandbox) => {
@@ -46,10 +42,6 @@ async function reap() {
 
 setInterval(() => void reap(), config.reaperIntervalMs);
 
-/**
- * `SPACES_ADMIN_EMAILS` also covers accounts that already exist, so a deployment
- * with one user on it needs no SQL step to get its first admin (decision 0037).
- */
 const promoted = await promoteListedAtBoot().catch((error: unknown) => {
   console.warn("[api] admin bootstrap failed:", error instanceof Error ? error.message : error);
   return [] as string[];
@@ -63,7 +55,6 @@ if (promoted.length > 0) {
   console.log(`[api] promoted ${promoted.length} account(s) from SPACES_ADMIN_EMAILS`);
 }
 
-/** Traces and capacity samples fill their tables faster than anything else; sweep on a slow timer. */
 async function sweep() {
   if (config.traces.retentionDays > 0) {
     const cutoff = new Date(Date.now() - config.traces.retentionDays * 86_400_000).toISOString();
@@ -90,6 +81,15 @@ async function sweep() {
     } catch (error) {
       console.warn("[reaper] sample sweep failed:", error instanceof Error ? error.message : error);
     }
+  }
+
+  try {
+    await store.sweepIdempotencyKeys(new Date());
+  } catch (error) {
+    console.warn(
+      "[reaper] idempotency sweep failed:",
+      error instanceof Error ? error.message : error,
+    );
   }
 }
 
@@ -124,6 +124,5 @@ export default {
   hostname: config.bindHost,
   fetch: app.fetch,
   websocket: runtimeWebsocket,
-  /** Long command timeouts need a generous idle window. */
   idleTimeout: 255,
 };

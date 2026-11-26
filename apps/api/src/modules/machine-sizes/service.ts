@@ -22,12 +22,6 @@ export async function listMachineSizes(includeRetired = false): Promise<MachineS
   return (await store.listMachineSizes(includeRetired)).map(shape);
 }
 
-/**
- * The preset a sandbox is created with. Unknown and retired names answer the
- * same way: a name that cannot be booted is not a size, whatever it used to be
- * (docs/decision/0034). No names are reserved for later, because the operator
- * owns the list.
- */
 export async function requireActiveMachineSize(name: string): Promise<ActiveMachineSize> {
   const row = await store.machineSize(name);
 
@@ -93,7 +87,6 @@ export async function updateMachineSize(
   return shape((await store.machineSize(name))!);
 }
 
-/** Soft retire: existing sandboxes keep their row and stay readable. */
 export async function retireMachineSize(
   name: string,
 ): Promise<{ name: string; retiredAt: string; inUse: number }> {

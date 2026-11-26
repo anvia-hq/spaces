@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-/** The build a runtime agent reports in `hello`; the console flags machines that disagree. */
 export const AGENT_VERSION = "0.1.0";
 
 export const PROTOCOL_VERSION = 1;
@@ -24,6 +23,7 @@ export const DriverCapabilities = z.object({
   exec: z.boolean(),
   files: z.boolean(),
   persistence: z.boolean(),
+  networkPolicy: z.boolean().optional(),
 });
 export type DriverCapabilities = z.infer<typeof DriverCapabilities>;
 
@@ -46,7 +46,6 @@ export const RuntimeSchema = z.object({
   snapshots: z.number().int(),
   resources: Resources.nullable(),
   committed: z.object({ vcpu: z.number().int(), memMib: z.number().int() }),
-  /** What the scheduler multiplies reported resources by before deciding there is no room. */
   overcommit: z.number(),
   driver: z.string().nullable(),
   capabilities: DriverCapabilities.nullable(),

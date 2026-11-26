@@ -1,14 +1,6 @@
-/**
- * Route template ("POST /sandboxes/:sandboxId/stop") -> action name and target.
- *
- * A route that is not listed still gets a row: the middleware falls back to the
- * method and the first segment of the template. Adding the mapping is how the
- * log becomes readable, and the UI shows the raw fallback until then.
- */
 export interface RouteAction {
   action: string;
   targetType?: string;
-  /** Which route param names the target. */
   targetParam?: string;
 }
 
@@ -102,16 +94,6 @@ const ROUTES: Record<string, RouteAction> = {
   "POST /saved-snapshots": { action: "snapshot.save", targetType: "snapshot" },
   "DELETE /saved-snapshots/:name": {
     action: "snapshot.delete",
-    targetType: "snapshot",
-    targetParam: "name",
-  },
-  "POST /saved-snapshots/:name/shares": {
-    action: "snapshot.share_create",
-    targetType: "snapshot",
-    targetParam: "name",
-  },
-  "DELETE /saved-snapshots/:name/shares/:shareId": {
-    action: "snapshot.share_revoke",
     targetType: "snapshot",
     targetParam: "name",
   },

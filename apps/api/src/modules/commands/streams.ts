@@ -1,10 +1,6 @@
 import { ServiceError } from "../../errors.ts";
 import { readSandboxProcessOutput, sandboxProcessState, startSandboxProcess } from "./service.ts";
 
-/**
- * CommandStreamFrame generator: `started`, then `stdout`/`stderr` chunks, then
- * exactly one `exit` or `error`.
- */
 export function commandStream(
   id: string,
   request: { command: string; cwd?: string; timeoutSeconds: number },
@@ -35,9 +31,6 @@ export function commandStream(
           sandboxProcessState(id, String(started.pid)),
         ]);
         state = live;
-
-        // Decode incrementally so a multi-byte character split across polls is
-        // not mangled: bytes are buffered until they form valid UTF-8.
 
         if (output.stdout.byteLength > 0) {
           stdoutOffset = output.stdoutNextOffset;
@@ -75,11 +68,6 @@ export function commandStream(
   };
 }
 
-/**
- * CommandAttachFrame stream: `attached` first, `stdout`/`stderr` chunks with
- * byte offsets, `heartbeat` when idle, then `exit`, `reconnect` (10 minute cap)
- * or `error`.
- */
 export function attachStream(
   id: string,
   processId: string,
@@ -99,9 +87,6 @@ export function attachStream(
     };
 
     for (;;) {
-      // Reconnect before the platform or proxy drops the connection, matching
-      // boat's 10 minute ceiling.
-
       if (Date.now() - startedAtMs > 10 * 60 * 1000) {
         yield { type: "reconnect", stdoutOffset, stderrOffset };
         return;
@@ -167,7 +152,6 @@ export function attachStream(
   };
 }
 
-/** Serialise an async generator of NDJSON frames. */
 export function ndjson(
   factory: () => AsyncGenerator<Record<string, unknown>, void, unknown>,
 ): ReadableStream<Uint8Array> {

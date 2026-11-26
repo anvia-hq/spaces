@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-/** GET /commands/{processId} — tail cap and incremental byte offsets. */
 export const CommandsStatusQuery = z
   .object({
     tailBytes: z.coerce.number().int().min(1).max(8388608).optional(),
@@ -9,7 +8,6 @@ export const CommandsStatusQuery = z
   })
   .strict();
 
-/** GET /commands/{processId}/stream — where each log starts. */
 export const CommandsAttachQuery = z
   .object({
     stdoutOffset: z.coerce.number().int().min(0).default(0),
@@ -17,7 +15,6 @@ export const CommandsAttachQuery = z
   })
   .strict();
 
-/** GET /command-history/{commandId}/logs — paged byte reads of stored output. */
 export const CommandLogsQuery = z
   .object({
     stream: z.enum(["stdout", "stderr"]).optional(),

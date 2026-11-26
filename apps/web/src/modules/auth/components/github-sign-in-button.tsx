@@ -11,14 +11,6 @@ function GithubMark() {
   );
 }
 
-/**
- * The OAuth half of the auth screen: one full-width button above the email
- * form, styled like every other primary action in the console.
- *
- * Better Auth redirects the whole page to GitHub, so there is no popup state
- * to keep; the button only has to say it is working and put a refusal back in
- * the screen's error line, as the email form does.
- */
 export function GithubSignInButton({ onError }: { onError: (message: string | null) => void }) {
   const [busy, setBusy] = useState(false);
 

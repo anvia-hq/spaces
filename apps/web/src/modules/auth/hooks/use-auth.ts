@@ -8,14 +8,6 @@ export type Auth =
   | { status: "signed-out" }
   | { status: "signed-in"; user: AuthUser };
 
-/**
- * Who the console is acting as.
- *
- * The console is login-first and session-only: without a session the shell is
- * not rendered at all. The operator key is for API clients, not this UI. `loading` matters — better-auth resolves the
- * session asynchronously, and treating "not known yet" as "signed out" flashes
- * the login screen on every reload.
- */
 export function useAuth() {
   const session = useSession();
 

@@ -4,20 +4,9 @@ import { existsSync } from "node:fs";
 import { config } from "./config.ts";
 import type { ApiEnv } from "./errors.ts";
 
-/** Paths the console must never answer: the API owns them. */
 export const isApiPath = (path: string) =>
   path === "/health" || path === "/api" || path.startsWith("/api/");
 
-/**
- * Serve the built console from the same origin as the API.
- *
- * Only active when `SPACES_WEB_ROOT` points at `apps/web/dist`; in development
- * Vite serves the console and proxies `/api` here.
- *
- * Registered last, and explicitly stepping aside for `/api` and `/health`: the
- * SPA fallback must never answer a mistyped endpoint with the console's HTML and
- * a 200, which is exactly how "the API is unreachable" gets misdiagnosed.
- */
 export function mountConsole(app: Hono<ApiEnv>): void {
   if (!config.webRoot) return;
 

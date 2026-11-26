@@ -1,12 +1,6 @@
 import type { ReactNode } from "react";
 import { Tabs as ShadTabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-/**
- * One tab component for every mutually-exclusive choice in the app.
- *
- * `inline` is the compact form used inside a panel header or filter row, where
- * a full-width underline would cut the panel in half.
- */
 export function Tabs<T extends string>({
   tabs,
   value,

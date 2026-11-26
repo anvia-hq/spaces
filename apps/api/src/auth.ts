@@ -30,29 +30,11 @@ function unauthorized(c: Parameters<MiddlewareHandler<ApiEnv>>[0], message: stri
   return fail(c, "unauthorized", message);
 }
 
-/**
- * Who the caller is, and what they may see. Three credentials are accepted:
- *
- * - the operator key (`SPACES_API_KEY`), which sees every sandbox — this is what
- *   existing clients and a fresh local install use;
- * - a Better Auth API key, which resolves to its owning user;
- * - a Better Auth session cookie, which is what the console uses after sign-in.
- *
- * A user whose role is `admin` is promoted to an admin scope, and a key takes
- * the role of the person who owns it (docs/decision/0037).
- *
- * The resolved scope rides on AsyncLocalStorage for the rest of the request, so
- * every read that could return another user's row is filtered in one place
- * (docs/decision/0028).
- */
 export const apiAuth: MiddlewareHandler<ApiEnv> = async (c, next) => {
   if (c.req.path.startsWith("/api/v1/_transfer/") || c.req.path.startsWith("/api/v1/_preview/")) {
     return next();
   }
 
-  // A browser that is signed in acts as that person, even if it also carries
-  // the operator key (the console seeds one on localhost). Everything else —
-  // curl, a CI job, an existing client — has no cookie and falls through.
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
 
   if (session?.user) {

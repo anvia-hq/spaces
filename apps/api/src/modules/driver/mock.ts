@@ -11,20 +11,17 @@ import type {
   SandboxDriver,
 } from "./types.ts";
 
-/** Every successful restore, in order, so a test can see which disk booted. */
 export const mockRestores: { sandboxId: string; fromRef: string }[] = [];
 
-/**
- * In-process driver. No KVM, no SSH — it models the lifecycle so the API and
- * UI are fully exercisable on any machine.
- */
 export class MockDriver implements SandboxDriver {
   readonly kind = "mock";
-  // Files need a guest transport; the mock has none, so it reports the gap
-  // honestly instead of pretending.
-  readonly capabilities = { exec: true, files: false, persistence: true };
+  readonly capabilities: SandboxDriver["capabilities"] = {
+    exec: true,
+    files: false,
+    persistence: true,
+    networkPolicy: true,
+  };
 
-  /** ref -> booted, at the size the caller resolved. */
   private live = new Map<string, { size: MachineSpec; bootedAt: number }>();
 
   private snapshots = new Set<string>();
@@ -41,9 +38,18 @@ export class MockDriver implements SandboxDriver {
     return { ref, url: `https://mock-${ref.slice(-6)}.spaces.local`, ip: `10.64.${n}.${m}` };
   }
 
+  private recordPorts(sandboxId: string, ports?: CreateOptions["ports"]) {
+    if (!ports) return;
+
+    for (const port of ports) {
+      this.published.set(port.hostPort, { sandboxId, guestPort: port.guestPort });
+    }
+  }
+
   async create(o: CreateOptions): Promise<DriverHandle> {
     await this.jitter();
     this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    this.recordPorts(o.sandboxId, o.ports);
     return this.handle(o.sandboxId);
   }
 
@@ -53,9 +59,10 @@ export class MockDriver implements SandboxDriver {
     return this.handle(o.sandboxId);
   }
 
-  async fork(o: CreateOptions & { fromRef: string }): Promise<DriverHandle> {
+  async fork(o: Omit<CreateOptions, "network"> & { fromRef: string }): Promise<DriverHandle> {
     await this.jitter(150);
     this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    this.recordPorts(o.sandboxId, o.ports);
     return this.handle(o.sandboxId);
   }
 
@@ -67,6 +74,7 @@ export class MockDriver implements SandboxDriver {
     }
 
     this.live.set(o.sandboxId, { size: o.size, bootedAt: Date.now() });
+    this.recordPorts(o.sandboxId, o.ports);
     mockRestores.push({ sandboxId: o.sandboxId, fromRef: o.fromRef });
     return this.handle(o.sandboxId);
   }
@@ -112,8 +120,6 @@ export class MockDriver implements SandboxDriver {
     await this.jitter(90);
     const finishedAt = new Date().toISOString();
 
-    // A few commands are answered with plausible machine output; anything else
-    // echoes so the UI has something honest to render.
     const cmd = request.command.trim();
     let stdout = "";
     let exitCode = 0;
@@ -197,8 +203,6 @@ export class MockDriver implements SandboxDriver {
     return this.filesUnsupported();
   }
 
-  /* ---- processes: not modelled by the fixture ---- */
-
   async startProcess(): Promise<{ pid: number; logPath: string; errLogPath: string }> {
     return this.filesUnsupported();
   }
@@ -233,8 +237,6 @@ export class MockDriver implements SandboxDriver {
   > {
     return this.filesUnsupported();
   }
-
-  /* ---- file operations: not modelled by the fixture ---- */
 
   private filesUnsupported(): never {
     throw new DriverUnsupported(

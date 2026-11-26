@@ -1,7 +1,6 @@
 export type ActorKind = "operator" | "user" | "system";
 
 export interface AuditEntry {
-  /** `sandbox.create`, `auth.sign_in`, … */
   action: string;
   actorKind: ActorKind;
   actorId?: string | null;
@@ -16,11 +15,9 @@ export interface AuditEntry {
   userAgent?: string | null;
   durationMs?: number | null;
   metadata?: Record<string, unknown>;
-  /** Whose log the row belongs to; null for the operator and system work. */
   ownerId?: string | null;
 }
 
-/** What a handler can tell the middleware that the request itself cannot. */
 export interface AuditHint {
   targetId?: string;
   targetType?: string;

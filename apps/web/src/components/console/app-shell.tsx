@@ -61,7 +61,6 @@ const GROUPS: readonly { label: string; items: readonly NavItem[] }[] = [
   },
 ];
 
-/** Only an admin sees this: everything behind it answers 403 to anybody else. */
 const ADMIN_GROUP: readonly { label: string; items: readonly NavItem[] }[] = [
   {
     label: "Admin",
@@ -78,13 +77,6 @@ const ADMIN_GROUP: readonly { label: string; items: readonly NavItem[] }[] = [
   },
 ];
 
-/**
- * The signed-in frame: one sidebar and one content column.
- *
- * Pages own their own header, actions and spacing, so the shell stays out of
- * the way. The sidebar is the same component on desktop (a fixed rail) and in
- * the mobile sheet, so the two cannot drift apart.
- */
 export function AppShell({
   user,
   onSignOut,
@@ -95,9 +87,6 @@ export function AppShell({
   children: ReactNode;
 }) {
   const path = useRouterState({ select: (state) => state.location.pathname });
-  // A route can opt out of the centred column (traces, audit) by declaring
-  // `staticData.fullWidth`. Reading it from the match keeps the list of
-  // full-width pages in the routes themselves rather than in this shell.
   const fullWidth = useRouterState({
     select: (state) =>
       Boolean((state.matches.at(-1)?.staticData as { fullWidth?: boolean } | undefined)?.fullWidth),
@@ -138,8 +127,6 @@ export function AppShell({
       </div>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        {/* width and border live under the data-side variant, so they must be
-            overridden in that namespace — a plain w-[…] loses the merge */}
         <SheetContent
           side="left"
           className="bg-sidebar p-0 data-[side=left]:w-[240px] data-[side=left]:border-r lg:hidden"
@@ -255,7 +242,6 @@ function NavLink({
 }
 
 function AccountCard({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
-  // The email is the identity here; a display name is decoration on top of it.
   const initials = user.email
     .split(/[\s@._-]+/)
     .filter(Boolean)

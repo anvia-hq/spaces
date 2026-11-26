@@ -5,12 +5,10 @@ const tracer = () => trace.getTracer("spaces");
 
 const SKIP = new Set(["capabilities", "kind", "then", "constructor"]);
 
-/** Typed property access for a proxy handler, which may be asked for a symbol. */
 function read(target: unknown, property: string | symbol): unknown {
   return (target as Record<string | symbol, unknown>)[property];
 }
 
-/** Everything async the driver exposes, in one span each. */
 export function tracedDriver(driver: SandboxDriver, runtimeId: string): SandboxDriver {
   return new Proxy(driver, {
     get(target, property) {
@@ -48,7 +46,6 @@ export function tracedDriver(driver: SandboxDriver, runtimeId: string): SandboxD
   });
 }
 
-/** First string that looks like a sandbox id, or the first string argument. */
 function sandboxIdOf(args: unknown[]): string {
   for (const arg of args) {
     if (typeof arg === "string" && arg.startsWith("bx_")) return arg;
@@ -65,7 +62,6 @@ function sandboxIdOf(args: unknown[]): string {
 
 const QUIET = new Set(["then", "constructor"]);
 
-/** Every store method, in one span each — the query and the mapping under it. */
 export function tracedStore<T extends object>(store: T): T {
   return new Proxy(store, {
     get(target, property) {

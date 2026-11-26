@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { DEFAULT_MACHINE_SIZE, type MachineSize } from "@spaces/shared/sandbox";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -67,7 +68,7 @@ export function EditMachineSizeDialog({
         <DialogHeader>
           <DialogTitle>Edit {size.name}</DialogTitle>
         </DialogHeader>
-        <form
+        <Form
           id="edit-machine-size"
           className="flex flex-col gap-4"
           onSubmit={(event) => {
@@ -82,7 +83,7 @@ export function EditMachineSizeDialog({
             New sandboxes get these numbers, and so does the next resume of a sandbox on this preset
             {diskChanged && "; existing disks keep the size they were created with"}.
           </p>
-        </form>
+        </Form>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={busy}>
             Cancel

@@ -1,16 +1,3 @@
-/**
- * Move a SQLite spaces database into Postgres.
- *
- *   bun run scripts/migrate-sqlite-to-postgres.ts <path-to-spaces.db>
- *
- * The SQLite file is opened read-only and never written. Postgres is expected to
- * be empty (the script refuses otherwise, because a half-filled target is the
- * one state nobody can reason about); migrations are applied here, then rows are
- * copied in foreign-key order with the conversions the two dialects need:
- * `0/1` booleans, Better Auth's epoch-millisecond timestamps, and JSON text into
- * `jsonb`. Row counts are verified afterwards and printed. The connection string
- * is never printed — decision 0030.
- */
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { createDb, databaseUrl } from "../packages/db/src/index.ts";
@@ -311,7 +298,6 @@ async function main() {
   }
 }
 
-/** camelCase -> snake_case, for the column list the insert needs. */
 function snake(name: string): string {
   return name.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }

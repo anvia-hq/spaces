@@ -6,7 +6,6 @@ import type { SpanRecord } from "@/lib/api.ts";
 
 import { cn } from "@/lib/utils";
 
-/** Depth by parent chain, so the tree reads like a call stack. */
 function depthOf(span: SpanRecord, byId: Map<string, SpanRecord>): number {
   let depth = 0;
   let current = span.parentSpanId ? byId.get(span.parentSpanId) : undefined;

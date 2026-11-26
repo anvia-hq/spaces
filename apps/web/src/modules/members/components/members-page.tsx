@@ -7,16 +7,13 @@ import { Notice } from "@/components/console/notice";
 import { Panel } from "@/components/console/panel";
 import { Skeleton } from "@/components/console/skeleton";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { type Members, useMembers } from "../hooks/use-members.ts";
 import { MemberRow } from "./member-row.tsx";
 
-/**
- * Admin-only: the accounts on this deployment and the presets they own. The
- * route gates it; this page assumes the caller may act as the operator.
- */
 export function MembersPage({ self }: { self: string | null }) {
   const members = useMembers();
 
@@ -91,7 +88,7 @@ function SizeForm({ members }: { members: Members }) {
   const [diskGb, setDiskGb] = useState("20");
 
   return (
-    <form
+    <Form
       className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
       onSubmit={(event) => {
         event.preventDefault();
@@ -128,7 +125,7 @@ function SizeForm({ members }: { members: Members }) {
         <Plus className="size-3.5" />
         Add size
       </Button>
-    </form>
+    </Form>
   );
 }
 

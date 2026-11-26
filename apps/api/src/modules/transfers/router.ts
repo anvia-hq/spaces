@@ -9,11 +9,6 @@ function transferError(c: Context<ApiEnv>, reason: string) {
   return fail(c, "unauthorized", `invalid transfer URL (${reason})`);
 }
 
-/**
- * Boat's transfer URLs are served by the sandbox. Our guests have no inbound
- * network, so this API serves them and streams to/from the guest. The client
- * contract is the same: raw bytes, no Authorization header, expires.
- */
 export const transfersRouter = new Hono<ApiEnv>()
   .get("/_transfer/:token", async (c) => {
     const transfer = await downloadTransfer(c.req.param("token"));

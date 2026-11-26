@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { RUNTIME_NAME } from "@spaces/shared/runtime";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -48,7 +49,7 @@ export function RegisterRuntimeDialog({
         <DialogHeader>
           <DialogTitle>Register runtime</DialogTitle>
         </DialogHeader>
-        <form
+        <Form
           id="register-runtime"
           className="flex flex-col gap-4"
           onSubmit={(event) => {
@@ -87,7 +88,7 @@ export function RegisterRuntimeDialog({
               onChange={(event) => setCap(event.target.value)}
             />
           </div>
-        </form>
+        </Form>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={busy}>
             Cancel

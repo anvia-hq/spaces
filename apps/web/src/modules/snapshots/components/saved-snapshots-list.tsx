@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Archive, ArrowUpRight, Search, Share2 } from "lucide-react";
+import { Archive, ArrowUpRight, Search } from "lucide-react";
 import { ConfirmDialog } from "@/components/console/confirm-dialog";
 import { PageHeader } from "@/components/console/page-header";
 import { Notice } from "@/components/console/notice";
@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtBytes, timeAgo } from "@/lib/format.ts";
 import { useSavedSnapshotList } from "../hooks/use-saved-snapshot-list.ts";
-import { Shares } from "./shares.tsx";
 import { SnapshotFiles } from "./snapshot-files.tsx";
 import { SnapshotStatusBadge } from "./snapshot-status-badge.tsx";
 
@@ -60,7 +59,7 @@ export function SavedSnapshotsList({
       {saved.data && all.length === 0 && (
         <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-border/80 bg-card/30 px-6 py-16 text-center">
           <div className="flex size-12 items-center justify-center rounded-xl border bg-muted/50 text-muted-foreground">
-            <Share2 className="size-5" />
+            <Archive className="size-5" />
           </div>
           <div>
             <p className="text-base font-medium text-foreground">No saved snapshots</p>
@@ -115,13 +114,13 @@ export function SavedSnapshotsList({
                         variant={open ? "secondary" : "outline"}
                         onClick={() => setExpanded(open ? null : s.name)}
                       >
-                        {open ? "Hide" : "Files & sharing"}
+                        {open ? "Hide" : "Files"}
                       </Button>
                     )}
                     <ConfirmDialog
                       trigger="Delete"
                       title={`Delete ${s.name}?`}
-                      description="The frozen disk and every share code pointing at it are destroyed."
+                      description="The frozen disk for this snapshot is permanently destroyed."
                       confirmLabel="Delete snapshot"
                       destructive
                       busy={busy === `del:${s.name}`}
@@ -135,9 +134,8 @@ export function SavedSnapshotsList({
                 )}
 
                 {open && s.snapshotId && (
-                  <div className="grid gap-3 px-4 pt-1 pb-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+                  <div className="px-4 pt-1 pb-4">
                     <SnapshotFiles snapshotId={s.snapshotId} />
-                    <Shares name={s.name} />
                   </div>
                 )}
               </li>

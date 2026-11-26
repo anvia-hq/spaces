@@ -32,14 +32,16 @@ function HeaderCell<TData>({ header }: { header: Header<TData, unknown> }) {
   const Icon = sorted ? SORT_ICON[sorted] : ChevronsUpDown;
 
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="xs"
       onClick={header.column.getToggleSortingHandler()}
-      className="inline-flex items-center gap-1 rounded-sm outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="-ml-1.5 h-auto px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-foreground"
     >
       {content}
       <Icon className="size-3 opacity-60" aria-hidden />
-    </button>
+    </Button>
   );
 }
 

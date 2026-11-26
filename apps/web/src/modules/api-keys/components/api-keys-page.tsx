@@ -9,6 +9,7 @@ import { Panel } from "@/components/console/panel";
 import { Skeleton } from "@/components/console/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
@@ -29,7 +30,7 @@ export function ApiKeysPage() {
         subtitle="Name it after where it lives, so revoking is obvious later."
         flush
       >
-        <form
+        <Form
           className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
           onSubmit={(event) => {
             event.preventDefault();
@@ -56,7 +57,7 @@ export function ApiKeysPage() {
             {busy === "create" ? <Spinner className="size-3.5" /> : <Plus className="size-3.5" />}
             Create key
           </Button>
-        </form>
+        </Form>
 
         {created && (
           <div className="border-t border-border/70 p-4">

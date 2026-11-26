@@ -1,10 +1,3 @@
-/**
- * Accounts and keys: sign-up, key lifecycle, and the isolation those keys buy.
- *
- * Runs on the mock driver like the rest of the suite. The operator key still
- * works — it is what an existing deploy and the console's local default use —
- * so both credential paths are exercised here (docs/decision/0028).
- */
 import { describe, expect, test } from "bun:test";
 
 const { app } = await import("../../app.ts");

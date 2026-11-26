@@ -1,12 +1,3 @@
-/**
- * Reaching a published port when `msb` runs on another machine.
- *
- * A published port binds to loopback on the hypervisor host, so the API cannot
- * dial it directly. Rather than binding the remote port on a public interface,
- * the API opens a local SSH forward and talks to that. The remote port stays on
- * 127.0.0.1 where it belongs.
- */
-
 import { isLocalHost } from "./ssh.ts";
 
 interface Tunnel {
@@ -14,14 +5,12 @@ interface Tunnel {
   process: ReturnType<typeof Bun.spawn>;
 }
 
-/** Keyed by `<host>:<remotePort>`; lives as long as the API process. */
 const tunnels = new Map<string, Tunnel>();
 
 function key(host: string, remotePort: number): string {
   return `${host}:${remotePort}`;
 }
 
-/** One free loopback port, picked by letting the kernel assign one. */
 function freeLocalPort(): number {
   const server = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
   const port = server.port;
@@ -36,7 +25,6 @@ async function waitForPort(port: number, timeoutMs = 5000): Promise<boolean> {
       await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(400) });
       return true;
     } catch (error) {
-      // Anything that is not a connection refusal means something answered.
       const message = error instanceof Error ? error.message : String(error);
 
       if (!/ECONNREFUSED|Unable to connect|fetch failed/i.test(message)) return true;
@@ -46,10 +34,6 @@ async function waitForPort(port: number, timeoutMs = 5000): Promise<boolean> {
   return false;
 }
 
-/**
- * Local port that forwards to `remotePort` on `host`. For the local driver the
- * port is already reachable, so it is returned unchanged.
- */
 export async function tunnelFor(host: string, remotePort: number): Promise<number> {
   if (isLocalHost(host)) return remotePort;
 
@@ -86,7 +70,6 @@ export async function tunnelFor(host: string, remotePort: number): Promise<numbe
     stdin: "ignore",
   });
 
-  // A dead ssh must not leave a stale entry behind.
   proc.exited.then(() => {
     if (tunnels.get(id)?.process === proc) tunnels.delete(id);
   });
@@ -101,7 +84,6 @@ export async function tunnelFor(host: string, remotePort: number): Promise<numbe
   return localPort;
 }
 
-/** Drop a forward, e.g. when the port is unpublished. */
 export function closeTunnel(host: string, remotePort: number): void {
   const id = key(host, remotePort);
   const tunnel = tunnels.get(id);

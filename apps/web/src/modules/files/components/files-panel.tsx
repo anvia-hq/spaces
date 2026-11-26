@@ -41,25 +41,29 @@ export function FilesPanel({ sandboxId, live }: { sandboxId: string; live: boole
             aria-label="Path"
             className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 text-base"
           >
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               onClick={() => void load(workdir)}
-              className="rounded px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="h-auto rounded px-1.5 py-0.5 text-base font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               ~
-            </button>
+            </Button>
             {segments.slice(1).map((segment, index) => {
               const path = `/${segments.slice(0, index + 2).join("/")}`;
               return (
                 <span key={path} className="flex items-center gap-0.5">
                   <ChevronRight className="size-3 text-border" />
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="xs"
                     onClick={() => void load(path)}
-                    className="rounded px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="h-auto rounded px-1.5 py-0.5 text-base font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
                     {segment}
-                  </button>
+                  </Button>
                 </span>
               );
             })}

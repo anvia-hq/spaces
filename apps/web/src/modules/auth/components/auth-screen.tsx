@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Mark } from "@/components/console/mark";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
@@ -10,14 +11,6 @@ import { useLoginProviders } from "../hooks/use-login-providers.ts";
 import type { AuthMode } from "../types.ts";
 import { GithubSignInButton } from "./github-sign-in-button.tsx";
 
-/**
- * The only thing a signed-out visitor sees.
- *
- * Login-first means no navigation, no empty tables and no "sign in to see this"
- * banners: one decision, on one screen. There is no operator-key path here —
- * that credential belongs to API clients, and offering it in the UI made
- * "signed in" mean two different things.
- */
 export function AuthScreen() {
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const [email, setEmail] = useState("");
@@ -47,7 +40,6 @@ export function AuthScreen() {
       return;
     }
 
-    // The session cookie is set; a reload re-runs the gate with it in place.
     window.location.replace("/");
   }
 
@@ -65,9 +57,6 @@ export function AuthScreen() {
           <span className="text-lg font-semibold tracking-heading text-foreground">spaces</span>
         </div>
 
-        {/* No heading, no subline, no card: the fields are the screen. Which
-            mode you are in is carried by the submit button and the link under
-            it, so a title would only repeat what the button already says. */}
         <div className="flex flex-col">
           {providers?.github && (
             <div className="mb-5 flex flex-col gap-4">
@@ -80,7 +69,7 @@ export function AuthScreen() {
             </div>
           )}
 
-          <form className="flex flex-col gap-3.5" onSubmit={submit}>
+          <Form className="flex flex-col gap-3.5" onSubmit={submit}>
             {signingUp && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="name">Name</Label>
@@ -140,20 +129,21 @@ export function AuthScreen() {
                 </>
               )}
             </Button>
-          </form>
+          </Form>
 
           <p className="mt-4 text-center text-base text-muted-foreground">
             {signingUp ? "Already have an account?" : "New here?"}{" "}
-            <button
+            <Button
               type="button"
-              className="font-medium text-foreground underline-offset-4 hover:underline"
+              variant="link"
+              className="h-auto border-0 p-0 text-base font-medium text-foreground"
               onClick={() => {
                 setMode(signingUp ? "sign-in" : "sign-up");
                 setError(null);
               }}
             >
               {signingUp ? "Sign in" : "Create an account"}
-            </button>
+            </Button>
           </p>
         </div>
       </div>

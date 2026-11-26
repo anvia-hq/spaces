@@ -20,7 +20,6 @@ import { machineSizesRouter } from "./modules/machine-sizes/router.ts";
 import { portsRouter } from "./modules/ports/router.ts";
 import { connectRouter } from "./modules/runtimes/connect.ts";
 import { runtimesRouter } from "./modules/runtimes/router.ts";
-import { refusalsRouter } from "./modules/sandboxes/refusals.ts";
 import { sandboxesRouter } from "./modules/sandboxes/router.ts";
 import { savedSnapshotsRouter } from "./modules/snapshots/saved-snapshots.ts";
 import { snapshotsRouter } from "./modules/snapshots/router.ts";
@@ -53,7 +52,6 @@ app.route("/api", authRouter);
 app.route("/api/v1", sandboxesRouter);
 app.route("/api/v1", machineSizesRouter);
 app.route("/api/v1", runtimesRouter);
-app.route("/api/v1", refusalsRouter);
 app.route("/api/v1", commandsRouter);
 app.route("/api/v1", filesRouter);
 app.route("/api/v1", snapshotsRouter);
@@ -72,12 +70,6 @@ app.onError(errorHandler);
 
 mountConsole(app);
 
-/**
- * Unknown paths answer in the same envelope as every other failure. Without
- * this, a mistyped endpoint returns Hono's plain-text `404 Not Found` and a
- * client parsing the error body gets nothing useful — the one place the
- * contract was still leaking through.
- */
 app.notFound((c) => {
   const path = new URL(c.req.url).pathname;
 

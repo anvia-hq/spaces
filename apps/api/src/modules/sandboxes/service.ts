@@ -1,9 +1,14 @@
+import { z } from "zod";
 import { newId, newSandboxId } from "@spaces/shared/errors";
-import type {
-  CreateSandboxRequest,
-  Sandbox,
-  SandboxState,
-  SandboxType,
+import {
+  SANDBOX_ID,
+  type CreateFileRequest,
+  type CreateHostedPortRequest,
+  type CreateSandboxRequest,
+  type NetworkPolicy,
+  type Sandbox,
+  type SandboxState,
+  type SandboxType,
 } from "@spaces/shared/sandbox";
 import { config } from "../../config.ts";
 import { iso, now, store, type RuntimeRow } from "../../db.ts";
@@ -15,7 +20,7 @@ import { requireActiveMachineSize } from "../machine-sizes/service.ts";
 import { assertRoom, pickRuntime } from "../runtimes/service.ts";
 import type { SchedulingRequest } from "../runtimes/types.ts";
 import { resolveCreateSource } from "./create-source.ts";
-import { reservePrepublishPorts, republishPorts } from "./host-ports.ts";
+import { portRangeOf, reservePrepublishPorts, republishPorts } from "./host-ports.ts";
 import type { CreateSource } from "./types.ts";
 
 function ttlToArchiveAfter(ttlSeconds: number | null): string | null {
@@ -24,23 +29,102 @@ function ttlToArchiveAfter(ttlSeconds: number | null): string | null {
   return new Date(Date.now() + ttlSeconds * 1000).toISOString();
 }
 
-/** Idempotency keys of the running process, mapped to the sandbox they created. */
-const idempotent = new Map<string, string>();
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const ISO_DATETIME = z.string().datetime();
+const inflightProvisions = new Map<string, Promise<void>>();
 
 export async function findIdempotentSandbox(key: string): Promise<Sandbox | null> {
-  const existing = idempotent.get(key);
+  const existing = await store.getIdempotencyKey(key);
 
   if (!existing) return null;
 
   return await store.get(existing);
 }
 
-export function rememberIdempotentSandbox(key: string, sandboxId: string): void {
-  idempotent.set(key, sandboxId);
+export function parseSandboxCursor(raw: string): { at: Date; id: string } | null {
+  const split = raw.indexOf("|");
+
+  if (split <= 0 || split === raw.length - 1) return null;
+
+  const isoRaw = raw.slice(0, split);
+  const id = raw.slice(split + 1);
+
+  if (!ISO_DATETIME.safeParse(isoRaw).success || !SANDBOX_ID.test(id)) return null;
+
+  const at = new Date(isoRaw);
+
+  if (Number.isNaN(at.getTime())) return null;
+
+  return { at, id };
 }
 
-/** Create a sandbox and return immediately in `provisioning`, like boat's 202. */
-export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbox> {
+async function waitForProvision(promise: Promise<void>, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      promise.catch(() => {}),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function finishCreateWait(
+  id: string,
+  timeoutSeconds: number,
+  replayed: boolean,
+): Promise<{ sandbox: Sandbox; ready: boolean; replayed: boolean }> {
+  const deadline = Date.now() + timeoutSeconds * 1000;
+
+  while (true) {
+    const inflight = inflightProvisions.get(id);
+    const remaining = deadline - Date.now();
+
+    if (inflight && remaining > 0) {
+      await waitForProvision(inflight, remaining);
+    }
+
+    const sandbox = await store.get(id);
+
+    if (!sandbox) throw new ServiceError("not_found", `no sandbox ${id}`);
+
+    if (sandbox.state === "error") {
+      throw new ServiceError("internal", sandbox.error ?? "sandbox provisioning failed");
+    }
+
+    if (["ready", "running", "idle"].includes(sandbox.state)) {
+      return { sandbox, ready: true, replayed };
+    }
+
+    const left = deadline - Date.now();
+
+    if (inflight || left <= 0) {
+      return { sandbox, ready: false, replayed };
+    }
+
+    await waitForProvision(new Promise<void>(() => {}), Math.min(25, left));
+  }
+}
+
+export async function createSandbox(
+  input: CreateSandboxRequest,
+  idempotencyKey?: string,
+): Promise<{ sandbox: Sandbox; ready: boolean; replayed: boolean }> {
+  if (idempotencyKey) {
+    const existing = await findIdempotentSandbox(idempotencyKey);
+
+    if (existing) {
+      if (input.wait) {
+        return await finishCreateWait(existing.id, input.waitTimeoutSeconds, true);
+      }
+
+      return { sandbox: existing, ready: false, replayed: true };
+    }
+  }
+
   if ((await store.totalSandboxes()) >= config.limits.maxSandboxes) {
     throw new ServiceError(
       "forbidden",
@@ -48,10 +132,22 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
     );
   }
 
-  // Refused before anything is written: a name that cannot boot is not a size.
   const size = await requireActiveMachineSize(input.type);
 
   const source = input.from ? await resolveCreateSource(input.from) : null;
+
+  if (source?.kind === "sandbox" && input.network) {
+    if (!sameNetworkPolicy(source.networkPolicy, input.network)) {
+      throw new ServiceError(
+        "network_policy_unsupported",
+        "fork inherits the source sandbox's network policy; create from a saved snapshot to apply a different policy",
+      );
+    }
+  }
+
+  const effectiveNetworkPolicy =
+    source?.kind === "sandbox" ? source.networkPolicy : (input.network ?? null);
+
   const scheduling: SchedulingRequest = { size };
 
   if (input.runtime) scheduling.pin = input.runtime;
@@ -60,72 +156,176 @@ export async function createSandbox(input: CreateSandboxRequest): Promise<Sandbo
 
   const runtime = await pickRuntime(scheduling);
 
+  if (
+    effectiveNetworkPolicy &&
+    effectiveNetworkPolicy.mode !== "default" &&
+    source?.kind !== "sandbox" &&
+    runtime.capabilities?.networkPolicy !== true
+  ) {
+    throw new ServiceError(
+      "network_policy_unsupported",
+      `runtime ${runtime.name} does not support per-sandbox network policies; upgrade its runtime agent`,
+    );
+  }
+
+  if (input.hostedPorts?.length && !portRangeOf(runtime)) {
+    throw new ServiceError(
+      "provider_not_configured",
+      runtime.kind === "local"
+        ? "Port publishing is disabled on this server (SPACES_PORT_RANGE_START=0)."
+        : `Port publishing is disabled on runtime ${runtime.name} (no port range advertised).`,
+    );
+  }
+
   const id = newSandboxId();
   const name = input.name ?? `Spaces ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
-  await store.insert({
+  const rowData = {
     id,
     name,
-    state: "provisioning",
+    state: "provisioning" as const,
     type: input.type,
     labels: input.labels,
     env: input.env,
     ttlSeconds: input.ttlSeconds,
     archiveAfter: ttlToArchiveAfter(input.ttlSeconds),
     runtimeId: runtime.id,
-  });
-  await store.event(id, "sandbox.created", { type: input.type, runtime: runtime.name });
+    setupStatus: input.setupScript !== undefined ? ("pending" as const) : null,
+    networkPolicy: effectiveNetworkPolicy,
+  };
 
-  void provision(id, runtime, input.type, size, input.env, source, input.setupScript).catch(() => {
-    /* recorded on the row by provision() */
-  });
+  if (idempotencyKey) {
+    const claimed = await store.insertSandboxIdempotent(
+      idempotencyKey,
+      new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      rowData,
+    );
 
-  return (await store.get(id))!;
+    if (!claimed.created) {
+      if (input.wait) {
+        return await finishCreateWait(claimed.sandbox.id, input.waitTimeoutSeconds, true);
+      }
+
+      return { sandbox: claimed.sandbox, ready: false, replayed: true };
+    }
+  } else {
+    await store.insert(rowData);
+  }
+
+  const provisioning = store
+    .event(id, "sandbox.created", { type: input.type, runtime: runtime.name })
+    .then(() =>
+      provision({
+        id,
+        runtime,
+        type: input.type,
+        size,
+        env: input.env,
+        source,
+        setupScript: input.setupScript,
+        hostedPorts: input.hostedPorts,
+        files: input.files,
+        network: effectiveNetworkPolicy ?? undefined,
+      }),
+    );
+  const tracked = provisioning
+    .catch(() => {})
+    .finally(() => {
+      inflightProvisions.delete(id);
+    });
+  inflightProvisions.set(id, tracked);
+
+  if (!input.wait) {
+    return { sandbox: (await store.get(id))!, ready: false, replayed: false };
+  }
+
+  return await finishCreateWait(id, input.waitTimeoutSeconds, false);
 }
 
-async function provision(
-  id: string,
-  runtime: RuntimeRow,
-  type: SandboxType,
-  size: MachineSpec,
-  env: Record<string, string>,
-  source: CreateSource | null,
-  setupScript?: string,
-) {
-  return withSpan("sandbox.provision", { "spaces.sandbox_id": id, "spaces.type": type }, () =>
-    provisionInner(id, runtime, type, size, env, source, setupScript),
+interface ProvisionOptions {
+  id: string;
+  runtime: RuntimeRow;
+  type: SandboxType;
+  size: MachineSpec;
+  env: Record<string, string>;
+  source: CreateSource | null;
+  setupScript?: string;
+  hostedPorts?: CreateHostedPortRequest[];
+  files?: CreateFileRequest[];
+  network?: NetworkPolicy;
+}
+
+async function provision(options: ProvisionOptions) {
+  return withSpan(
+    "sandbox.provision",
+    { "spaces.sandbox_id": options.id, "spaces.type": options.type },
+    () => provisionInner(options),
   );
 }
 
-async function provisionInner(
-  id: string,
-  runtime: RuntimeRow,
-  type: SandboxType,
-  size: MachineSpec,
-  env: Record<string, string>,
-  source: CreateSource | null,
-  setupScript?: string,
-) {
-  const started = Date.now();
+async function writeCreateFiles(
+  driver: SandboxDriver,
+  ref: string,
+  files: CreateFileRequest[],
+): Promise<void> {
+  const encoder = new TextEncoder();
 
-  // Reserve host ports up front: the allocator reads the rows, so inserting
-  // before create keeps two concurrent sandboxes off the same host port.
-  const ports = await reservePrepublishPorts(id, runtime);
+  for (const file of files) {
+    const bytes =
+      file.encoding === "base64"
+        ? new Uint8Array(Buffer.from(file.content, "base64"))
+        : encoder.encode(file.content);
+
+    try {
+      await driver.writeFile(ref, file.path, bytes);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`failed to write ${file.path}: ${reason}`);
+    }
+  }
+}
+
+async function provisionInner(options: ProvisionOptions) {
+  const { id, runtime, type, size, env, source, setupScript, hostedPorts, files, network } =
+    options;
+  const started = Date.now();
+  let driver: SandboxDriver | null = null;
+  let created = false;
 
   try {
-    const driver = driverFor(runtime.id);
-    const options = { sandboxId: id, type, size, env, ports };
+    const ports = await reservePrepublishPorts(id, runtime, hostedPorts);
+    driver = driverFor(runtime.id);
     let handle: DriverHandle;
 
     if (!source) {
-      handle = await driver.create(options);
+      handle = await driver.create({ sandboxId: id, type, size, env, ports, network });
     } else if (source.kind === "snapshot") {
-      handle = await driver.restore({ ...options, fromRef: source.driverRef });
+      handle = await driver.restore({
+        sandboxId: id,
+        type,
+        size,
+        env,
+        ports,
+        network,
+        fromRef: source.driverRef,
+      });
     } else {
-      handle = await driver.fork({ ...options, fromRef: source.driverRef });
+      handle = await driver.fork({
+        sandboxId: id,
+        type,
+        size,
+        env,
+        ports,
+        fromRef: source.driverRef,
+      });
     }
 
-    await republishPorts(id, driver);
+    created = true;
     await runBootstrap(id, driver, handle.ref);
+
+    if (files && files.length > 0) {
+      await writeCreateFiles(driver, handle.ref, files);
+    }
+
     await store.update(id, {
       state: "ready",
       url: handle.url,
@@ -136,14 +336,24 @@ async function provisionInner(
       hydratedAt: now(),
     });
     await store.event(id, "sandbox.ready", { ms: Date.now() - started, ref: handle.ref });
-    // boat's `setupScript`: starts once the sandbox is usable and never blocks
-    // it becoming ready, so a slow script does not delay the 202.
 
-    if (setupScript !== undefined) void runSetupScript(id, driver, handle.ref, setupScript);
+    if (setupScript !== undefined) {
+      void runSetupScript(id, driver, handle.ref, setupScript).catch(() => {});
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
+    if (created && driver) await driver.destroy(id).catch(() => {});
+
     await store.deletePortsOf(id);
-    await store.update(id, { state: "error", error: message });
+    const patch: Parameters<typeof store.update>[1] = { state: "error", error: message };
+
+    if (setupScript !== undefined) {
+      patch.setupStatus = "failed";
+      patch.setupError = message;
+    }
+
+    await store.update(id, patch);
     await store.event(id, "sandbox.error", { message });
   }
 }
@@ -178,16 +388,19 @@ export async function getSandbox(id: string): Promise<Sandbox> {
   return await requireSandbox(id);
 }
 
-export async function listSandboxes(filter: Parameters<typeof store.list>[0]) {
-  return await store.list(filter);
+export async function getSandboxNetwork(id: string): Promise<NetworkPolicy> {
+  const sandbox = await requireSandbox(id);
+  return sandbox.network ?? { mode: "default", allow: [] };
+}
+
+export async function listSandboxesPage(filter: Parameters<typeof store.listPage>[0]) {
+  return await store.listPage(filter);
 }
 
 export async function sandboxEvents(id: string, after: number) {
   const rows = await store.listEvents(id, after);
 
   return rows.map((e) => ({
-    // Payload first: it may contain a `type` of its own (e.g. the machine
-    // size on sandbox.created) and must not shadow the event discriminator.
     ...e.payload,
     id: e.id,
     type: e.type,
@@ -197,7 +410,7 @@ export async function sandboxEvents(id: string, after: number) {
 
 export async function updateSandbox(
   id: string,
-  patch: { name?: string; labels?: Record<string, string>; ttlSeconds?: number | null },
+  patch: { name?: string; labels?: Record<string, string> | null; ttlSeconds?: number | null },
 ): Promise<Sandbox> {
   await requireSandbox(id);
 
@@ -209,7 +422,7 @@ export async function updateSandbox(
 
   if (patch.name !== undefined) changes.name = patch.name;
 
-  if (patch.labels !== undefined) changes.labels = patch.labels;
+  if (patch.labels !== undefined) changes.labels = patch.labels ?? {};
 
   if (patch.ttlSeconds !== undefined) changes.archiveAfter = ttlToArchiveAfter(patch.ttlSeconds);
 
@@ -218,7 +431,6 @@ export async function updateSandbox(
   return (await store.get(id))!;
 }
 
-/** boat's StopOperation shape. */
 export function stopOperation(row: {
   id: string;
   status: string;
@@ -242,7 +454,6 @@ export function stopOperation(row: {
 export async function getStopOperation(id: string, stopId: string) {
   await requireSandbox(id);
   const row = await store.getStop(stopId);
-  // Unknown ids and ids of another sandbox are both 404.
 
   if (!row || row.sandboxId !== id) {
     throw new ServiceError("not_found", `no stop ${stopId} for sandbox ${id}`);
@@ -251,11 +462,6 @@ export async function getStopOperation(id: string, stopId: string) {
   return stopOperation(row);
 }
 
-/**
- * Stop and archive. A stop is an operation: the row is created before any work
- * so a caller can always poll it, and a failed save leaves the sandbox running
- * with the stop marked `failing` rather than discarding the disk.
- */
 export async function stopSandbox(
   id: string,
   options: { force?: boolean } = {},
@@ -268,8 +474,6 @@ async function stopInner(
   options: { force?: boolean } = {},
 ): Promise<{ stopId: string; stop: ReturnType<typeof stopOperation>; sandbox: Sandbox }> {
   const sandbox = await requireSandbox(id);
-
-  // Already archived: hand back the last stop, as boat does.
 
   if (sandbox.state === "archived") {
     const existing = await store.pendingStop(id);
@@ -305,7 +509,6 @@ async function stopInner(
 
   const driver = driverFor(sandbox.runtimeId);
 
-  // Reuse an in-flight stop so repeat calls return the same id.
   let stopRow = await store.pendingStop(id);
 
   if (!stopRow) {
@@ -344,7 +547,6 @@ async function stopInner(
     await store.event(id, "sandbox.stopped", { diskRef });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    // Keep the sandbox running: a refused stop must not discard the disk.
     await store.update(id, { state: "error", error: message });
     await store.updateStop(stopRow.id, {
       status: "failing",
@@ -364,14 +566,24 @@ async function stopInner(
 
 export async function resumeSandbox(
   id: string,
-  options: { ttlSeconds?: number | null; type?: SandboxType; name?: string } = {},
+  options: {
+    ttlSeconds?: number | null;
+    type?: SandboxType;
+    name?: string;
+    env?: Record<string, string>;
+  } = {},
 ): Promise<Sandbox> {
   return withSpan("sandbox.resume", { "spaces.sandbox_id": id }, () => resumeInner(id, options));
 }
 
 async function resumeInner(
   id: string,
-  options: { ttlSeconds?: number | null; type?: SandboxType; name?: string } = {},
+  options: {
+    ttlSeconds?: number | null;
+    type?: SandboxType;
+    name?: string;
+    env?: Record<string, string>;
+  } = {},
 ): Promise<Sandbox> {
   const sandbox = await requireSandbox(id);
 
@@ -389,7 +601,6 @@ async function resumeInner(
   const size = await requireActiveMachineSize(type);
   const driver = driverFor(sandbox.runtimeId);
   await assertRoom(sandbox.runtimeId, size);
-  // A resume ends any pending stop early, as `superseded`.
   const pending = await store.pendingStop(id);
 
   if (pending) {
@@ -400,14 +611,14 @@ async function resumeInner(
     state: SandboxState;
     type: SandboxType;
     name?: string;
+    env?: Record<string, string>;
     ttlSeconds?: number | null;
     archiveAfter?: string | null;
   } = { state: "provisioning", type };
 
   if (options.name !== undefined) resume.name = options.name;
 
-  // The spec's resume request carries `ttlSeconds`: applying it resets the
-  // auto-stop timer from now rather than from the original create.
+  if (options.env !== undefined) resume.env = options.env;
 
   if (options.ttlSeconds !== undefined) {
     resume.ttlSeconds = options.ttlSeconds;
@@ -422,13 +633,15 @@ async function resumeInner(
 
   await store.event(id, "sandbox.resuming", resuming);
 
+  const env = options.env ?? (await store.env(id));
+
   try {
     const handle = await driver.resume({
       sandboxId: id,
       type,
       size,
       fromRef: row.driverRef,
-      env: await store.env(id),
+      env,
     });
     await republishPorts(id, driver);
     await runBootstrap(id, driver, handle.ref);
@@ -450,12 +663,21 @@ async function resumeInner(
   return (await store.get(id))!;
 }
 
-/** Fork clones the source's disk into a brand new sandbox. */
 export async function forkSandbox(
   id: string,
   overrides: Partial<CreateSandboxRequest> = {},
 ): Promise<Sandbox> {
   return withSpan("sandbox.fork", { "spaces.sandbox_id": id }, () => forkInner(id, overrides));
+}
+
+function sameNetworkPolicy(a: NetworkPolicy | null | undefined, b: NetworkPolicy): boolean {
+  const effectiveA: NetworkPolicy = a ?? { mode: "default", allow: [] };
+
+  if (effectiveA.mode !== b.mode) return false;
+
+  const setA = new Set(effectiveA.allow);
+  const setB = new Set(b.allow);
+  return setA.size === setB.size && [...setA].every((entry) => setB.has(entry));
 }
 
 async function forkInner(
@@ -469,39 +691,53 @@ async function forkInner(
     throw new ServiceError("sandbox_not_ready", "source has no disk to fork");
   }
 
+  if (overrides.network && !sameNetworkPolicy(row.networkPolicy, overrides.network)) {
+    throw new ServiceError(
+      "network_policy_unsupported",
+      "fork inherits the source sandbox's network policy; create from a saved snapshot to apply a different policy",
+    );
+  }
+
   const newId_ = newSandboxId();
   const type = overrides.type ?? source.type;
   const size = await requireActiveMachineSize(type);
   const runtime = await pickRuntime({ sourceRuntimeId: row.runtimeId, size });
+  const env = overrides.env ?? (await store.env(id));
+  const ttlSeconds = overrides.ttlSeconds === undefined ? 3600 : overrides.ttlSeconds;
   await store.insert({
     id: newId_,
     name: overrides.name ?? `${source.name} (fork)`,
     state: "cloning",
     type,
     labels: overrides.labels ?? source.labels,
-    env: overrides.env ?? {},
-    ttlSeconds: overrides.ttlSeconds ?? 3600,
-    archiveAfter: ttlToArchiveAfter(overrides.ttlSeconds ?? 3600),
+    env,
+    ttlSeconds,
+    archiveAfter: ttlToArchiveAfter(ttlSeconds),
     forkOf: id,
     runtimeId: runtime.id,
+    networkPolicy: row.networkPolicy ?? null,
   });
   await store.event(newId_, "sandbox.fork", { from: id });
   await store.event(id, "sandbox.forked", { into: newId_ });
 
-  void provision(newId_, runtime, type, size, overrides.env ?? {}, {
-    kind: "sandbox",
-    id,
-    driverRef: row.driverRef,
-    runtimeId: row.runtimeId,
+  void provision({
+    id: newId_,
+    runtime,
+    type,
+    size,
+    env,
+    source: {
+      kind: "sandbox",
+      id,
+      driverRef: row.driverRef,
+      runtimeId: row.runtimeId,
+      networkPolicy: row.networkPolicy ?? null,
+    },
   }).catch(() => {});
 
   return (await store.get(newId_))!;
 }
 
-/**
- * Run the operator's bootstrap snippet. A failure is recorded as an event and
- * ignored: a sandbox that boots is still useful without extra packages.
- */
 async function runBootstrap(id: string, driver: SandboxDriver, ref: string): Promise<void> {
   const script = config.bootstrap.trim();
 
@@ -512,7 +748,6 @@ async function runBootstrap(id: string, driver: SandboxDriver, ref: string): Pro
     const result = await driver.exec(ref, {
       command: script,
       timeoutSeconds: config.bootstrapTimeoutSeconds,
-      // Operator plumbing: `apk add` and friends need root.
       runAs: "root",
     });
     const payload: { ms: number; exitCode: number | null; stderr?: string } = {
@@ -530,21 +765,16 @@ async function runBootstrap(id: string, driver: SandboxDriver, ref: string): Pro
   }
 }
 
-/**
- * boat's `setupScript`: run once, after the sandbox is ready, as the sandbox
- * user. Its outcome is recorded as an event rather than surfaced as
- * `setupStatus`, which this server does not implement — see docs/decision/0021.
- */
 async function runSetupScript(
   id: string,
   driver: SandboxDriver,
   ref: string,
   script: string,
 ): Promise<void> {
-  if (config.driver === "mock") return;
-
   const started = Date.now();
+
   try {
+    await store.update(id, { setupStatus: "running", setupError: null });
     const result = await driver.exec(ref, {
       command: script,
       timeoutSeconds: config.bootstrapTimeoutSeconds,
@@ -554,13 +784,28 @@ async function runSetupScript(
       exitCode: result.exitCode,
     };
 
-    if (result.exitCode !== 0) payload.stderr = result.stderr.slice(0, 2000);
+    if (result.exitCode === 0 && !result.timedOut) {
+      await store.update(id, { setupStatus: "done", setupError: null });
+    } else {
+      const detail = result.stderr.trim().slice(0, 2000);
+      let summary = `exit ${result.exitCode ?? "unknown"}`;
+
+      if (result.timedOut) {
+        summary = `timed out after ${config.bootstrapTimeoutSeconds}s`;
+      } else if (detail) {
+        summary = `${summary}: ${detail}`;
+      }
+
+      if (detail) payload.stderr = detail;
+
+      await store.update(id, { setupStatus: "failed", setupError: summary });
+    }
 
     await store.event(id, "sandbox.setup_script", payload);
   } catch (error) {
-    await store.event(id, "sandbox.setup_script_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    const message = error instanceof Error ? error.message : String(error);
+    await store.update(id, { setupStatus: "failed", setupError: message.slice(0, 2000) });
+    await store.event(id, "sandbox.setup_script_failed", { message });
   }
 }
 
@@ -573,20 +818,12 @@ async function destroyInner(id: string): Promise<void> {
   const driver = driverFor(sandbox.runtimeId);
   try {
     await driver.destroy(id);
-  } catch {
-    // Deleting a sandbox whose machine already died must still succeed.
-  }
-  // Published ports are host-side state; the rows must not outlive the machine
-  // or the host port stays reserved in the allocator.
+  } catch {}
   await store.deletePortsOf(id);
   await store.event(id, "sandbox.deleted");
   await store.remove(id);
 }
 
-/**
- * Power-cycle a sandbox that stopped answering. The disk is untouched, which is
- * exactly what a microVM restart is.
- */
 export async function recoverSandbox(id: string) {
   const sandbox = await requireSandbox(id);
 
@@ -599,7 +836,6 @@ export async function recoverSandbox(id: string) {
 
   const driver = driverFor(sandbox.runtimeId);
 
-  // A reachable sandbox needs no recovery.
   const reachable = await driver
     .exec(`msb:${id}`, { command: "true", timeoutSeconds: 5 })
     .then((r) => r.exitCode === 0)
@@ -615,8 +851,6 @@ export async function recoverSandbox(id: string) {
   const last = await store.get(id);
 
   if (last && Date.now() - Date.parse(last.updatedAt ?? last.createdAt) < 10 * 60 * 1000) {
-    // boat refuses a second recover within 10 minutes.
-
     if ((await store.allEvents(id)).some((e) => e.type === "sandbox.recover")) {
       throw new ServiceError(
         "sandbox_not_ready",

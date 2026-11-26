@@ -1,14 +1,3 @@
-/**
- * Guest-runtime tests: items that can only be checked inside a real microVM.
- *
- * Opt-in, because they need a hypervisor:
- *
- *   SPACES_IT=1 bun test                       # against `msb` on this machine
- *   SPACES_IT=1 SPACES_MSB_HOST=box bun test   # against another host over SSH
- *   SPACES_IT=1 SPACES_MSB_IMAGE=spaces/guest:ubuntu SPACES_IT_READY=1 bun test
- *
- * Everything else in this directory runs on the mock driver and always runs.
- */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { MicrosandboxDriver } from "./microsandbox.ts";
 
@@ -80,13 +69,10 @@ suite("guest runtime (real microVM)", () => {
     });
     expect(started.pid).toBeGreaterThan(0);
 
-    // Give the 2 s timeout room to fire, then check the group is gone.
     await Bun.sleep(5000);
     const state = await driver.processState(ref, "it-timeout");
     expect(state.running).toBe(false);
     expect(state.known).toBe(true);
-    // Coreutils `timeout` reports 124, busybox reports 143 (128+SIGTERM).
-    // Both mean "the deadline killed it", and the images differ.
     expect([124, 143]).toContain(state.exitCode ?? -1);
   }, 90_000);
 
@@ -100,8 +86,6 @@ suite("guest runtime (real microVM)", () => {
 
     await Bun.sleep(5000);
     const state = await driver.processState(ref, "it-escape");
-    // The wrapper exited (0) because it backgrounded, but the process it
-    // started is still alive in its own session.
     const alive = await driver.exec(ref, {
       command: "pgrep -f 'sleep 45' >/dev/null && echo alive || echo gone",
       timeoutSeconds: 30,
@@ -119,8 +103,6 @@ suite("guest runtime (real microVM)", () => {
     expect(result.stdout.trim().length).toBeGreaterThan(0);
   }, 60_000);
 
-  // The ready image's whole point: the tools are there on the first command,
-  // with nothing installed at boot.
   test.skipIf(!readyImage)(
     "the ready image ships curl, git, ps and pgrep on first boot (item 4)",
     async () => {
@@ -135,4 +117,24 @@ suite("guest runtime (real microVM)", () => {
     },
     90_000,
   );
+
+  test("per-sandbox deny policy blocks outbound traffic while keeping exec working", async () => {
+    const deniedId = `bx_nd${Date.now().toString(36).slice(-6)}`;
+    try {
+      const handle = await driver.create({
+        sandboxId: deniedId,
+        type: "default",
+        size: { vcpu: 2, memMib: 2048, diskGb: 20 },
+        network: { mode: "deny", allow: [] },
+      });
+      const probe = await driver.exec(handle.ref, {
+        command:
+          "wget -qO- --timeout=3 https://example.com >/dev/null 2>&1 && echo reachable || echo blocked",
+        timeoutSeconds: 20,
+      });
+      expect(probe.stdout.trim()).toBe("blocked");
+    } finally {
+      await driver.destroy(deniedId).catch(() => {});
+    }
+  }, 120_000);
 });

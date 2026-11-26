@@ -171,10 +171,11 @@ export function TerminalPanel({ sandboxId, live }: { sandboxId: string; live: bo
                 const ok = c.exitCode === 0;
                 return (
                   <li key={c.commandId}>
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       onClick={() => void loadLogs(c)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:text-foreground"
+                      className="h-auto w-full justify-start gap-3 rounded-none px-3 py-2 text-left font-normal hover:bg-transparent hover:text-foreground"
                     >
                       <span className={cn("w-6 shrink-0 text-base", exitTone(running, ok))}>
                         {running ? "··" : (c.exitCode ?? "—")}
@@ -190,7 +191,7 @@ export function TerminalPanel({ sandboxId, live }: { sandboxId: string; live: bo
                       <span className="shrink-0 text-base text-muted-foreground">
                         {timeAgo(c.startedAt)}
                       </span>
-                    </button>
+                    </Button>
                   </li>
                 );
               })}

@@ -1,7 +1,6 @@
 import { auth } from "../auth/service.ts";
 import type { AuthUser } from "../auth/types.ts";
 
-/** A key as the console shows it: never the secret, only its start. */
 function shape(row: {
   id: string;
   name: string | null;
@@ -27,7 +26,6 @@ export async function listApiKeys(headers: Headers) {
   return answer.apiKeys.map((row) => shape(row));
 }
 
-/** The secret comes back exactly once, at creation; only a hash is stored. */
 export async function createApiKey(headers: Headers, user: AuthUser, name: string) {
   const created = await auth.api.createApiKey({ body: { name, userId: user.id }, headers });
   return { key: created.key, entry: shape(created) };

@@ -22,8 +22,6 @@ export const commandsRouter = new Hono<ApiEnv>()
     const request = c.req.valid("json");
     assertRunnable(id);
 
-    // ---- detached: return a process handle immediately.
-
     if (request.detached) {
       const started = await startSandboxProcess(id, request, "detached");
       return c.json({
@@ -34,15 +32,12 @@ export const commandsRouter = new Hono<ApiEnv>()
       });
     }
 
-    // ---- stream: newline-delimited JSON frames as the command writes output.
-
     if (request.stream) {
       return new Response(ndjson(commandStream(id, request)), {
         headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" },
       });
     }
 
-    // ---- default: synchronous.
     return c.json(await runSandboxCommand(id, request));
   })
   .get("/sandboxes/:sandboxId/command-history", async (c) =>

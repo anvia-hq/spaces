@@ -16,9 +16,6 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // `/health` lives at the API root, not under /api/v1. Without this the dev
-      // server answers it with the SPA fallback, and a JSON parse of HTML makes
-      // the console report the API as unreachable.
       "/health": {
         target: apiTarget,
         changeOrigin: true,

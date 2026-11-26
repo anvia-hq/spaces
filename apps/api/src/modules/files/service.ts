@@ -4,10 +4,8 @@ import { requireLiveSandbox } from "../sandboxes/service.ts";
 import { mintTransferToken } from "./sign.ts";
 import type { TransferMethod } from "./types.ts";
 
-/** Boat's inline limit; larger transfers need the URL endpoints we do not serve. */
 export const INLINE_LIMIT = 5 * 1024 * 1024;
 
-/** Shared read path; `limit` differs between the inline and signed-URL routes. */
 async function readBytes(id: string, path: string, limit: number, label: string) {
   const { ref, driver } = await requireLiveSandbox(id);
   const info = await driver.fileInfo(ref, path);
@@ -43,7 +41,6 @@ async function writeBytes(
   return { size: bytes.byteLength };
 }
 
-/** Inline route: capped at 5 MiB, like boat's `GET`/`PUT /files`. */
 export async function readSandboxFile(id: string, path: string) {
   return readBytes(id, path, INLINE_LIMIT, "inline read");
 }
@@ -52,7 +49,6 @@ export async function writeSandboxFile(id: string, path: string, bytes: Uint8Arr
   return writeBytes(id, path, bytes, INLINE_LIMIT, "inline write");
 }
 
-/** Signed-URL route: boat promises no size limit here, so only the transfer cap applies. */
 export async function readSandboxFileRaw(id: string, path: string) {
   return readBytes(id, path, config.transferMaxBytes, "transfer");
 }
@@ -113,7 +109,6 @@ export async function findInSandboxFiles(
   return driver.findInFiles(ref, path, pattern, options);
 }
 
-/** Throws unless the sandbox is running; used to reject dead transfer links early. */
 export async function assertSandboxLive(id: string): Promise<void> {
   await requireLiveSandbox(id);
 }
@@ -124,13 +119,6 @@ export async function setSandboxPermissions(id: string, path: string, mode: stri
   return { path, mode };
 }
 
-/**
- * Bulk literal text replacement. Boat treats `pattern` as plain text (not a
- * regex) and replaces every occurrence byte-for-byte, so this runs host-side
- * over the file endpoints rather than trying to express it in shell.
- *
- * One file failing does not stop the others.
- */
 export async function replaceInSandboxFiles(
   id: string,
   paths: string[],
@@ -198,10 +186,6 @@ function countOccurrences(haystack: string, needle: string): number {
   return count;
 }
 
-/**
- * A signed URL for one path: `GET` downloads, `PUT` uploads. Minting fails fast
- * for a download of a missing path rather than handing out a dead link.
- */
 export async function mintFileTransfer(
   sandboxId: string,
   request: { path: string; ttlSeconds: number },
