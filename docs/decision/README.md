@@ -53,6 +53,9 @@ out. Numbers quoted are measured, not estimated.
 | [0043](./0043-install-a-runtime-with-one-command.md)               | A runtime is installed by one command, run on the machine              | accepted, builds on 0042             |
 | [0044](./0044-a-cluster-is-one-team.md)                            | A cluster is one team, and nothing here is held back                   | accepted, narrows 0028               |
 | [0045](./0045-the-operator-console.md)                             | The operator's console: one Cluster page, and history the server keeps | accepted, builds on 0034, 0042, 0044 |
+| [0046](./0046-trim-compat-surface-and-harden-sandboxes-api.md)     | Trim SaaS compatibility leftovers and harden the sandbox API           | accepted, supersedes parts of 0021   |
+| [0047](./0047-synchronous-create-and-create-time-provisioning.md)  | Synchronous create and create-time provisioning                        | accepted, builds on 0014, 0046       |
+| [0048](./0048-per-sandbox-network-policy.md)                       | Per-sandbox network egress policy                                      | accepted, builds on 0013             |
 
 ## Reading order
 
@@ -61,26 +64,26 @@ that keeps the two apart. Everything else follows from those three.
 
 Changing a specific area? Jump straight to the relevant record:
 
-| Working on                           | Read                         |
-| ------------------------------------ | ---------------------------- |
-| Runtime, images, boot                | 0001, 0013, 0016, 0035       |
-| API surface, status codes, errors    | 0002, 0003, 0005, 0021       |
-| Files, transfers, path handling      | 0008, 0009, 0010             |
-| Commands, processes, streaming       | 0012                         |
-| Snapshots, forks, sharing            | 0011, 0018, 0019, 0038       |
-| Networking, ports, SSH, remote hosts | 0013, 0014, 0015, 0017, 0022 |
-| Storage, metering, state             | 0006, 0020, 0030             |
-| Machine sizes, capacity, presets     | 0034, 0037                   |
-| The console                          | 0021, 0023, 0026, 0024, 0039 |
-| The operator's console               | 0045, 0042, 0034, 0037       |
-| Deploying it somewhere               | 0025, 0017, 0022, 0042       |
-| Runtimes, scheduling, the agent      | 0042, 0043, 0007, 0017       |
-| Where a file goes                    | 0027                         |
-| Auth, keys, who sees which sandbox   | 0028, 0044, 0037             |
-| Audit log, who did what              | 0031                         |
-| Tracing, spans, metrics              | 0032                         |
-| Style, lint rules, formatting        | 0029                         |
-| Storage engine, moving data          | 0030                         |
+| Working on                           | Read                               |
+| ------------------------------------ | ---------------------------------- |
+| Runtime, images, boot                | 0001, 0013, 0016, 0035             |
+| API surface, status codes, errors    | 0002, 0003, 0005, 0021, 0046, 0047 |
+| Files, transfers, path handling      | 0008, 0009, 0010                   |
+| Commands, processes, streaming       | 0012                               |
+| Snapshots, forks, sharing            | 0011, 0018, 0019, 0038             |
+| Networking, ports, SSH, remote hosts | 0013, 0014, 0015, 0017, 0022, 0048 |
+| Storage, metering, state             | 0006, 0020, 0030                   |
+| Machine sizes, capacity, presets     | 0034, 0037                         |
+| The console                          | 0021, 0023, 0026, 0024, 0039       |
+| The operator's console               | 0045, 0042, 0034, 0037             |
+| Deploying it somewhere               | 0025, 0017, 0022, 0042             |
+| Runtimes, scheduling, the agent      | 0042, 0043, 0007, 0017             |
+| Where a file goes                    | 0027                               |
+| Auth, keys, who sees which sandbox   | 0028, 0044, 0037                   |
+| Audit log, who did what              | 0031                               |
+| Tracing, spans, metrics              | 0032                               |
+| Style, lint rules, formatting        | 0029                               |
+| Storage engine, moving data          | 0030                               |
 
 ## Not covered here
 

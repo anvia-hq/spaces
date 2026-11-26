@@ -22,45 +22,53 @@ sandbox can be created at. Routes for a capability this deployment does not run 
 - **An empty body means `{}`.** `Content-Type: application/json` with no body is accepted on every
   route whose body is optional (`POST /sandboxes`, `/stop`, `/resume`, …).
 - **Unknown fields are rejected** — `400 invalid_body` on a body, `400 invalid_query` on a query,
-  naming the field. Fields that are accepted but not acted on are listed in
-  [create fields](#create-fields).
+  naming the field.
 - **Commands run as `user`** — uid/gid 1000, `HOME=/home/user`, passwordless `sudo`. Files written
   through the API are owned by that user, not by root.
-- **`202` means started, not finished.** Create, resume and fork answer `202` with a sandbox in a
-  transitional state; poll `GET /sandboxes/{id}` until `ready`.
+- **`202` means started, not finished.** Create (unless `wait: true`), resume and fork answer `202`
+  with a sandbox in a transitional state; poll `GET /sandboxes/{id}` until `ready`. With
+  `wait: true`, `POST /sandboxes` answers `201` once `ready` (or `202` if `waitTimeoutSeconds`
+  elapses first).
 
 ## Sandboxes
 
-| Method                 | Path                             | Notes                                                                   |
-| ---------------------- | -------------------------------- | ----------------------------------------------------------------------- |
-| `GET`                  | `/limits`                        | Local capacity, not billing                                             |
-| `GET`/`POST`           | `/sandboxes`                     | `Idempotency-Key` honoured; `state`/`name`/`namePrefix`/`label` filters |
-| `GET`/`PATCH`/`DELETE` | `/sandboxes/{id}`                |                                                                         |
-| `POST`                 | `/sandboxes/{id}/stop`           | Frees the machine, keeps the disk; returns a stop operation             |
-| `GET`                  | `/sandboxes/{id}/stops/{stopId}` | Pollable after a resume                                                 |
-| `POST`                 | `/sandboxes/{id}/resume`         | Boots the disk again                                                    |
-| `POST`                 | `/sandboxes/{id}/fork`           | Copy-on-write child of the disk                                         |
-| `POST`                 | `/sandboxes/{id}/recover`        | Power-cycles the machine, disk untouched                                |
-| `GET`                  | `/sandboxes/{id}/events`         | Lifecycle timeline                                                      |
-| `GET`                  | `/sandboxes/{id}/usage`          | Billable machine-seconds inside a window                                |
+| Method                 | Path                             | Notes                                                                                                  |
+| ---------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `GET`                  | `/limits`                        | Local capacity, not billing                                                                            |
+| `GET`/`POST`           | `/sandboxes`                     | Durable `Idempotency-Key`; `state`/`name`/`namePrefix`/`label`/`stoppedBefore`/`sort`/`limit`/`cursor` |
+| `GET`/`PATCH`/`DELETE` | `/sandboxes/{id}`                | `PATCH` accepts `name`, `labels` (`null` clears), `ttlSeconds` (`null` disables auto-stop)             |
+| `GET`                  | `/sandboxes/{id}/network`        | Active egress policy (`default`, `open`, `deny`, or `allow`)                                           |
+| `POST`                 | `/sandboxes/{id}/stop`           | Frees the machine, keeps the disk; returns a stop operation                                            |
+| `GET`                  | `/sandboxes/{id}/stops/{stopId}` | Pollable after a resume                                                                                |
+| `POST`                 | `/sandboxes/{id}/resume`         | Boots the disk again; accepts `ttlSeconds`, `type`, `name`, `env`                                      |
+| `POST`                 | `/sandboxes/{id}/fork`           | Copy-on-write child of the disk; inherits `env` and `network` unless overridden                        |
+| `POST`                 | `/sandboxes/{id}/recover`        | Power-cycles the machine, disk untouched                                                               |
+| `GET`                  | `/sandboxes/{id}/events`         | Lifecycle timeline                                                                                     |
+| `GET`                  | `/sandboxes/{id}/usage`          | Machine-seconds inside a window                                                                        |
 
 ### Create fields
 
-`POST /sandboxes` accepts a wider shape than it acts on: fields kept for clients written against an
-earlier version are accepted rather than rejected, and recorded in
-[decision 0021](./decision/0021-extensions-and-honest-refusals.md):
+Every field `POST /sandboxes` accepts is acted on (decisions
+[0046](./decision/0046-trim-compat-surface-and-harden-sandboxes-api.md),
+[0047](./decision/0047-synchronous-create-and-create-time-provisioning.md),
+[0048](./decision/0048-per-sandbox-network-policy.md)):
 
-| Field                                                                                                                         | Status                                                                                                                                    |
-| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`, `ttlSeconds`, `labels`, `env`, `name`                                                                                 | **Honoured.** `ttlSeconds: null` (or the legacy `"infinite"`) disables auto-stop; `env` is injected into the guest                        |
-| `from`                                                                                                                        | **Honoured** for a sandbox id (fork its disk) or a saved snapshot name visible to the caller (restore its disk). Never a silent cold boot |
-| `runtime`                                                                                                                     | **Honoured.** A runtime id or name to create on. Omitted, the control plane picks one; see [runtimes](#runtimes)                          |
-| `setupScript`                                                                                                                 | **Honoured**: runs once after `ready` as `user`; the outcome is recorded as a `sandbox.setup_script` event                                |
-| `environment`, `noEnv`, `visibility`, `snapshots`, `monitoring`, `failFast`, `count`, `hostedPorts`, `files`, `org`, `teamId` | **Accepted and ignored.** Write `files` with `PUT /sandboxes/{id}/files`; publish `hostedPorts` with `POST /sandboxes/{id}/host`          |
+| Field                        | Behaviour                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`, `ttlSeconds`, `name` | `ttlSeconds: null` disables auto-stop (default `3600`); `type` names an active preset from `/machine-sizes`                           |
+| `labels`, `env`              | `labels` (≤20) filterable via `GET /sandboxes?label=k=v`; `env` (≤100) injected into commands                                         |
+| `from`                       | A live sandbox id (fork its disk) or a saved snapshot name (restore its disk). Never a silent cold boot                               |
+| `runtime`                    | A runtime id or name to create on. Omitted, the control plane picks one; see [runtimes](#runtimes)                                    |
+| `wait`, `waitTimeoutSeconds` | `wait: true` blocks up to `waitTimeoutSeconds` (1–120, default `30`) and answers `201` with a `ready` sandbox, or `202` on timeout    |
+| `hostedPorts`                | Up to 50 guest ports reserved before initial boot (`explicit: true`), avoiding the post-boot restart penalty                          |
+| `files`                      | Up to 32 files (≤5 MiB each, ≤20 MiB total) under `/home/user` or `/tmp`, written as `user` before the sandbox becomes `ready`        |
+| `setupScript`                | Runs once after `ready` as `user`; status and failure tail are surfaced on `Sandbox.setupStatus` / `Sandbox.setupError` and `/events` |
+| `network`                    | Per-sandbox egress policy: `{ mode: "default" \| "open" \| "deny" \| "allow", allow?: string[] }`; private IPs/CIDRs are rejected     |
 
-`POST /sandboxes/{id}/resume` takes `ttlSeconds` (resets the auto-stop timer from the resume, not from
-the original create), `type` (moves the sandbox to another size) and `name`, and accepts the other
-tolerated fields unchanged.
+`POST /sandboxes/{id}/resume` accepts `ttlSeconds` (resets the auto-stop timer from now), `type`
+(moves the sandbox to another machine size), `name`, and `env` (replaces stored env).
+`POST /sandboxes/{id}/fork` inherits the parent's `env` (unless `env` is supplied) and `network`
+policy (passing a conflicting `network` answers `409 network_policy_unsupported`).
 
 **Creating from a saved snapshot.** `from` may name a saved snapshot the caller can see. The new
 sandbox gets its own `type`, `env`, `labels`, `ttlSeconds` and `setupScript`, and boots from a copy of
@@ -301,38 +309,27 @@ profile. See [Networking](./configuration.md#networking).
 
 ## Snapshots
 
-| Method                | Path                                       | Notes                                                    |
-| --------------------- | ------------------------------------------ | -------------------------------------------------------- |
-| `GET`/`POST`          | `/saved-snapshots`                         | Save under a name; list with `name`/`namePrefix` filters |
-| `GET`/`DELETE`        | `/saved-snapshots/{name}`                  | Re-saving a name replaces its artifact                   |
-| `GET`/`POST`          | `/saved-snapshots/{name}/shares`           | Codes hashed, shown once                                 |
-| `DELETE`              | `/saved-snapshots/{name}/shares/{shareId}` | Revoke                                                   |
-| `GET`/`POST`/`DELETE` | `/named-snapshots[/{name}]`                | Deprecated aliases of the saved-snapshot routes          |
-| `GET`                 | `/snapshots`                               | Every snapshot artifact                                  |
-| `GET`/`DELETE`        | `/snapshots/{id}`                          |                                                          |
-| `GET`/`DELETE`        | `/sandboxes/{id}/snapshots[/latest]`       |                                                          |
-| `GET`                 | `/snapshots/{id}/tree`                     | Flat listing, cached per snapshot                        |
-| `GET`                 | `/snapshots/{id}/files`                    | File bytes or a subtree tar; `Range` → 206               |
-| `GET`                 | `/snapshots/{id}/download`                 | Signed chunk URL for the workdir tar                     |
+| Method         | Path                                 | Notes                                                    |
+| -------------- | ------------------------------------ | -------------------------------------------------------- |
+| `GET`/`POST`   | `/saved-snapshots`                   | Save under a name; list with `name`/`namePrefix` filters |
+| `GET`/`DELETE` | `/saved-snapshots/{name}`            | Re-saving a name replaces its artifact                   |
+| `GET`          | `/snapshots`                         | Every snapshot artifact                                  |
+| `GET`/`DELETE` | `/snapshots/{id}`                    |                                                          |
+| `GET`/`DELETE` | `/sandboxes/{id}/snapshots[/latest]` |                                                          |
+| `GET`          | `/snapshots/{id}/tree`               | Flat listing, cached per snapshot                        |
+| `GET`          | `/snapshots/{id}/files`              | File bytes or a subtree tar; `Range` → 206               |
+| `GET`          | `/snapshots/{id}/download`           | Signed chunk URL for the workdir tar                     |
 
 ## Scope
 
-The tenancy and SaaS surface has no meaning for a self-hosted runtime and is absent (404), not
-stubbed: `/orgs`, `/account/*`, `/webhooks`, `/billing`, `/credential-profiles`, `/ai-proxy`,
-`/telemetry`, `/ci`, `/repos`, `/environments`, `/secrets`.
+Spaces is a self-hosted microVM cluster for one team. Tenancy, SaaS, and integrated-agent routes
+(`/orgs`, `/account/*`, `/webhooks`, `/billing`, `/credential-profiles`, `/ai-proxy`, `/ai-usage`,
+`/telemetry`, `/ci`, `/repos`, `/environments`, `/secrets`, `/desktop`, `/prompt`, `/share`) do not
+exist and answer `404` in the standard error envelope (decisions
+[0003](./decision/0003-no-saas-account-surface.md) and
+[0046](./decision/0046-trim-compat-surface-and-harden-sandboxes-api.md)).
 
-`/api-keys` and `/me` do exist, but as this server's own shapes for its own accounts (below).
-`/ai-usage` keeps answering an empty meter rather than 404, so a polling client does not break.
-
-Routes that older clients still call but that nothing here can back answer
-`501 provider_not_configured` with the actual reason, rather than a fake success or a misleading 404:
-
-| Path                                                                                | Why                                                   |
-| ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `/sandboxes/{id}/desktop`                                                           | No display server, and noVNC needs WebSocket proxying |
-| `/sandboxes/{id}/prompt`, `/steer`, `/interrupt`, `/conversations`, `/prompts/{id}` | No integrated AI agent                                |
-| `/sandboxes/{id}/ai-access`                                                         | No AI proxy                                           |
-| `/sandboxes/{id}/share`, `/unshare`                                                 | No accounts or organizations                          |
+`/api-keys` and `/me` exist as this server's own shapes for its own accounts (below).
 
 ## Accounts and keys
 
