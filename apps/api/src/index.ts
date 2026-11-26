@@ -91,6 +91,15 @@ async function sweep() {
       console.warn("[reaper] sample sweep failed:", error instanceof Error ? error.message : error);
     }
   }
+
+  try {
+    await store.sweepIdempotencyKeys(new Date());
+  } catch (error) {
+    console.warn(
+      "[reaper] idempotency sweep failed:",
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
 
 async function sample() {

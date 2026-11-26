@@ -25,6 +25,8 @@ export class ServiceError extends Error {
       | "invalid_body"
       | "invalid_query"
       | "invalid_path"
+      | "invalid_network_policy"
+      | "network_policy_unsupported"
       | "provider_not_configured"
       | "file_too_large"
       | "destination_exists"
@@ -96,6 +98,8 @@ const SERVICE_CODES = {
   invalid_body: "invalid_body",
   invalid_query: "invalid_query",
   invalid_path: "invalid_path",
+  invalid_network_policy: "invalid_network_policy",
+  network_policy_unsupported: "network_policy_unsupported",
   file_too_large: "file_too_large",
   destination_exists: "destination_exists",
   provider_not_configured: "provider_not_configured",

@@ -14,6 +14,7 @@ import {
   sql,
   commands,
   events,
+  idempotencyKeys,
   isNull,
   machineSizes,
   sandboxes,
@@ -35,20 +36,25 @@ import {
   type SandboxRow,
   type SavedSnapshotRow,
   type SnapshotRow,
-  type SnapshotShareRow,
   type AuditLogRow,
   type StopRow,
   auditLog,
   type SQL,
 } from "@spaces/db";
-import type { Sandbox, SandboxState, SandboxType } from "@spaces/shared/sandbox";
+import type {
+  NetworkPolicy,
+  Sandbox,
+  SandboxState,
+  SandboxType,
+  SetupStatus,
+} from "@spaces/shared/sandbox";
 import { LOCAL_RUNTIME_ID } from "@spaces/shared/runtime";
 import type { RuntimeLoad } from "./modules/runtimes/types.ts";
 import { config } from "./config.ts";
 import { canSee, currentOwnerId, scopedOwner } from "./scope.ts";
 import { tracedStore } from "./modules/traces/proxies.ts";
 
-export type { RuntimeSampleRow, SavedSnapshotRow, SnapshotShareRow } from "@spaces/db";
+export type { RuntimeSampleRow, SavedSnapshotRow } from "@spaces/db";
 
 const handle = createDb(config.databaseUrl);
 export const db = handle.db;
@@ -72,14 +78,19 @@ export async function one<T>(query: PromiseLike<T[]>): Promise<T | null> {
   return rows[0] ?? null;
 }
 
+export type SandboxSort = "createdAt:desc" | "createdAt:asc" | "updatedAt:desc";
+
 export interface ListFilter {
   states?: SandboxState[];
   name?: string;
   namePrefix?: string;
   labels?: string[];
+  stoppedBefore?: string;
+  sort?: SandboxSort;
+  limit?: number;
+  cursor?: { at: Date; id: string };
 }
 
-/** DB row -> API shape. `jsonb` columns arrive parsed; nothing to decode here. */
 function toSandbox(row: SandboxRow): Sandbox {
   return {
     id: row.id,
@@ -94,12 +105,13 @@ function toSandbox(row: SandboxRow): Sandbox {
     updatedAt: row.updatedAt.toISOString(),
     stoppedAt: iso(row.stoppedAt),
     archiveAfter: iso(row.archiveAfter),
-    desktopAvailable: false,
-    desktopUrl: null,
     snapshotAvailable: row.snapshotAt !== null,
     snapshotCompletedAt: iso(row.snapshotAt),
     hydrated: row.hydrated,
     hydratedAt: iso(row.hydratedAt),
+    setupStatus: (row.setupStatus as SetupStatus | null) ?? null,
+    setupError: row.setupError ?? null,
+    network: row.networkPolicy ?? null,
     runtimeId: row.runtimeId,
   };
 }
@@ -115,10 +127,30 @@ const ACTIVE_STATES: SandboxState[] = [
   "archiving",
 ];
 
+function matchesLabels(sandbox: Sandbox, labels: string[]): boolean {
+  for (const raw of labels) {
+    const idx = raw.indexOf("=");
+    const key = idx === -1 ? raw : raw.slice(0, idx);
+    const value = idx === -1 ? "" : raw.slice(idx + 1);
+
+    if (sandbox.labels[key] !== value) return false;
+  }
+
+  return true;
+}
+
 const rawStore = {
   async list(filter: ListFilter = {}): Promise<Sandbox[]> {
-    const where = [];
+    const { sandboxes: items } = await this.listPage(filter);
+    return items;
+  },
+
+  async listPage(
+    filter: ListFilter = {},
+  ): Promise<{ sandboxes: Sandbox[]; nextCursor: string | null }> {
+    const where: SQL[] = [];
     const owner = scopedOwner();
+    const sort: SandboxSort = filter.sort ?? "createdAt:desc";
 
     if (owner) where.push(eq(sandboxes.ownerId, owner));
 
@@ -128,21 +160,59 @@ const rawStore = {
 
     if (filter.namePrefix !== undefined) where.push(like(sandboxes.name, `${filter.namePrefix}%`));
 
+    if (filter.stoppedBefore !== undefined) {
+      where.push(lt(sandboxes.stoppedAt, new Date(filter.stoppedBefore)));
+    }
+
+    const orderColumn = sort === "updatedAt:desc" ? sandboxes.updatedAt : sandboxes.createdAt;
+    const ascending = sort === "createdAt:asc";
+
+    if (filter.cursor) {
+      const { at: cursorAt, id: cursorId } = filter.cursor;
+      where.push(
+        ascending
+          ? or(
+              gt(orderColumn, cursorAt),
+              and(eq(orderColumn, cursorAt), gt(sandboxes.id, cursorId)),
+            )!
+          : or(
+              lt(orderColumn, cursorAt),
+              and(eq(orderColumn, cursorAt), lt(sandboxes.id, cursorId)),
+            )!,
+      );
+    }
+
     const rows = await db
       .select()
       .from(sandboxes)
       .where(where.length ? and(...where) : undefined)
-      .orderBy(desc(sandboxes.createdAt));
+      .orderBy(
+        ascending ? asc(orderColumn) : desc(orderColumn),
+        ascending ? asc(sandboxes.id) : desc(sandboxes.id),
+      );
 
-    const mapped = rows.map(toSandbox);
+    const labels = filter.labels ?? [];
+    const filtered: Sandbox[] = [];
 
-    // Label filters are conjunctive: every `key=value` must match.
-    return (filter.labels ?? []).reduce<Sandbox[]>((acc, raw) => {
-      const idx = raw.indexOf("=");
-      const key = idx === -1 ? raw : raw.slice(0, idx);
-      const value = idx === -1 ? "" : raw.slice(idx + 1);
-      return acc.filter((row) => row.labels[key!] === value);
-    }, mapped);
+    for (const row of rows) {
+      const sandbox = toSandbox(row);
+
+      if (labels.length === 0 || matchesLabels(sandbox, labels)) filtered.push(sandbox);
+    }
+
+    if (!filter.limit) {
+      return { sandboxes: filtered, nextCursor: null };
+    }
+
+    const hasMore = filtered.length > filter.limit;
+    const page = hasMore ? filtered.slice(0, filter.limit) : filtered;
+    const tail = page[page.length - 1];
+    const nextCursor =
+      hasMore && tail
+        ? `${sort === "updatedAt:desc" ? tail.updatedAt : tail.createdAt}|${tail.id}`
+        : null;
+
+    return { sandboxes: page, nextCursor };
   },
 
   async get(id: string): Promise<Sandbox | null> {
@@ -166,6 +236,8 @@ const rawStore = {
     archiveAfter: string | null;
     forkOf?: string | null;
     runtimeId?: string;
+    setupStatus?: SetupStatus | null;
+    networkPolicy?: NetworkPolicy | null;
   }) {
     const ts = now();
     await db.insert(sandboxes).values({
@@ -179,6 +251,8 @@ const rawStore = {
       archiveAfter: at(s.archiveAfter),
       forkOf: s.forkOf ?? null,
       runtimeId: s.runtimeId ?? LOCAL_RUNTIME_ID,
+      setupStatus: s.setupStatus ?? null,
+      networkPolicy: s.networkPolicy ?? null,
       ownerId: currentOwnerId(),
       createdAt: at(ts)!,
       updatedAt: at(ts)!,
@@ -196,12 +270,15 @@ const rawStore = {
       url: string | null;
       ip: string | null;
       labels: Record<string, string>;
+      env: Record<string, string>;
       stoppedAt: string | null;
       archiveAfter: string | null;
       snapshotAt: string | null;
       driverRef: string | null;
       hydrated: boolean;
       hydratedAt: string | null;
+      setupStatus: SetupStatus | null;
+      setupError: string | null;
     }>,
   ) {
     const values: {
@@ -213,8 +290,11 @@ const rawStore = {
       url?: string | null;
       ip?: string | null;
       labels?: Record<string, string>;
+      env?: Record<string, string>;
       driverRef?: string | null;
       hydrated?: boolean;
+      setupStatus?: SetupStatus | null;
+      setupError?: string | null;
       updatedAt: Date;
       stoppedAt?: Date | null;
       archiveAfter?: Date | null;
@@ -238,9 +318,15 @@ const rawStore = {
 
     if (patch.labels !== undefined) values.labels = patch.labels;
 
+    if (patch.env !== undefined) values.env = patch.env;
+
     if (patch.driverRef !== undefined) values.driverRef = patch.driverRef;
 
     if (patch.hydrated !== undefined) values.hydrated = patch.hydrated;
+
+    if (patch.setupStatus !== undefined) values.setupStatus = patch.setupStatus;
+
+    if (patch.setupError !== undefined) values.setupError = patch.setupError;
 
     if (patch.stoppedAt !== undefined) values.stoppedAt = at(patch.stoppedAt);
 
@@ -826,35 +912,36 @@ const rawStore = {
     await db.update(snapshots).set({ manifest }).where(eq(snapshots.id, snapshotId));
   },
 
-  /* ---------------------------------------------------------- snapshot shares */
+  async getIdempotencyKey(key: string): Promise<string | null> {
+    const row = await one(
+      db
+        .select({ sandboxId: idempotencyKeys.sandboxId, expiresAt: idempotencyKeys.expiresAt })
+        .from(idempotencyKeys)
+        .where(eq(idempotencyKeys.key, key)),
+    );
 
-  async insertShare(r: {
-    id: string;
-    name: string;
-    codeHash: string;
-    codePrefix: string;
-    createdAt: string;
-  }) {
-    await db.insert(snapshotShares).values({ ...r, createdAt: at(r.createdAt)! });
+    if (!row || row.expiresAt.getTime() <= Date.now()) return null;
+
+    return row.sandboxId;
   },
 
-  async listShares(name: string): Promise<SnapshotShareRow[]> {
-    return db
-      .select()
-      .from(snapshotShares)
-      .where(eq(snapshotShares.name, name))
-      .orderBy(desc(snapshotShares.createdAt));
-  },
-
-  async getShare(id: string): Promise<SnapshotShareRow | null> {
-    return one(db.select().from(snapshotShares).where(eq(snapshotShares.id, id)));
-  },
-
-  async revokeShare(id: string, at_: string) {
+  async putIdempotencyKey(key: string, sandboxId: string, expiresAt: Date) {
     await db
-      .update(snapshotShares)
-      .set({ revokedAt: at(at_) })
-      .where(eq(snapshotShares.id, id));
+      .insert(idempotencyKeys)
+      .values({ key, sandboxId, createdAt: new Date(), expiresAt })
+      .onConflictDoUpdate({
+        target: idempotencyKeys.key,
+        set: { sandboxId, expiresAt },
+      });
+  },
+
+  async sweepIdempotencyKeys(cutoff: Date): Promise<number> {
+    const rows = await db
+      .delete(idempotencyKeys)
+      .where(lt(idempotencyKeys.expiresAt, cutoff))
+      .returning({ key: idempotencyKeys.key });
+
+    return rows.length;
   },
 
   async deleteSharesOf(name: string) {
