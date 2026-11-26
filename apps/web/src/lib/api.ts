@@ -1,5 +1,11 @@
 import type { Runtime, RuntimeSample } from "@spaces/shared/runtime";
-import type { MachineSize, Sandbox, SandboxState, SandboxType } from "@spaces/shared/sandbox";
+import type {
+  MachineSize,
+  NetworkPolicy,
+  Sandbox,
+  SandboxState,
+  SandboxType,
+} from "@spaces/shared/sandbox";
 
 const BASE = "/api/v1";
 /*
@@ -154,16 +160,6 @@ export interface SavedSnapshot {
   createdAt: string;
 }
 
-export interface SnapshotShare {
-  id: string;
-  codePrefix: string;
-  status: "active" | "revoked";
-  useCount: number;
-  lastUsedAt: string | null;
-  revokedAt: string | null;
-  createdAt: string;
-}
-
 export interface TreeEntry {
   path: string;
   kind: "file" | "dir" | "symlink";
@@ -227,6 +223,7 @@ export const api = {
     name?: string;
     runtime?: string;
     labels?: Record<string, string>;
+    network?: NetworkPolicy;
   }) =>
     request<{ sandbox: Sandbox }>("/sandboxes", {
       method: "POST",
@@ -428,20 +425,6 @@ export const api = {
 
   deleteSavedSnapshot: (name: string) =>
     request<{ name: string; status: "deleted" }>(`/saved-snapshots/${name}`, { method: "DELETE" }),
-
-  snapshotShares: (name: string) =>
-    request<{ name: string; shares: SnapshotShare[] }>(`/saved-snapshots/${name}/shares`),
-
-  createShare: (name: string) =>
-    request<{ name: string; shareCode: string; share: SnapshotShare }>(
-      `/saved-snapshots/${name}/shares`,
-      { method: "POST", body: JSON.stringify({}) },
-    ),
-
-  revokeShare: (name: string, shareId: string) =>
-    request<{ name: string; share: SnapshotShare }>(`/saved-snapshots/${name}/shares/${shareId}`, {
-      method: "DELETE",
-    }),
 
   snapshotTree: (snapshotId: string) =>
     request<SnapshotTree & { ok: true; type: string }>(`/snapshots/${snapshotId}/tree`),

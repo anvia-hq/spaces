@@ -12,22 +12,34 @@ export function MachinePanel({
   sandbox: Sandbox;
   size: MachineSize | undefined;
 }) {
+  const rows: [string, string][] = [
+    ["type", sandbox.type],
+    [
+      "resources",
+      size
+        ? `${size.vcpu} vCPU · ${size.memMib / 1024} GiB · ${size.diskGb} GiB disk`
+        : "preset no longer offered",
+    ],
+    ["ip", sandbox.ip ?? "—"],
+    ["auto-stop", sandbox.archiveAfter ? timeUntil(sandbox.archiveAfter) : "never"],
+    ["created", sandbox.createdAt ? timeAgo(sandbox.createdAt) : "—"],
+    ["snapshot", sandbox.snapshotAvailable ? timeAgo(sandbox.snapshotCompletedAt) : "none"],
+  ];
+
+  if (sandbox.network && sandbox.network.mode !== "default") {
+    const networkLabel =
+      sandbox.network.mode === "allow"
+        ? `allow (${sandbox.network.allow.join(", ")})`
+        : sandbox.network.mode;
+    rows.push(["network", networkLabel]);
+  }
+
+  if (sandbox.setupStatus) rows.push(["setup", sandbox.setupStatus]);
+
   return (
     <Panel title="Machine" flush>
       <dl className="divide-y divide-border/70">
-        {[
-          ["type", sandbox.type],
-          [
-            "resources",
-            size
-              ? `${size.vcpu} vCPU · ${size.memMib / 1024} GiB · ${size.diskGb} GiB disk`
-              : "preset no longer offered",
-          ],
-          ["ip", sandbox.ip ?? "—"],
-          ["auto-stop", sandbox.archiveAfter ? timeUntil(sandbox.archiveAfter) : "never"],
-          ["created", sandbox.createdAt ? timeAgo(sandbox.createdAt) : "—"],
-          ["snapshot", sandbox.snapshotAvailable ? timeAgo(sandbox.snapshotCompletedAt) : "none"],
-        ].map(([key, value]) => (
+        {rows.map(([key, value]) => (
           <div key={key} className="flex items-baseline justify-between gap-3 px-4 py-2">
             <dt className="text-base tracking-wide text-muted-foreground">{key}</dt>
             <dd className="truncate text-base text-foreground/90" title={value}>

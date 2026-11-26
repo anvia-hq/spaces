@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { MachineSize, SandboxType } from "@spaces/shared/sandbox";
+import type { MachineSize, NetworkMode, NetworkPolicy, SandboxType } from "@spaces/shared/sandbox";
 import { Check } from "lucide-react";
 import { Segmented } from "@/components/console/segmented";
 import { Button } from "@/components/ui/button";
@@ -25,16 +25,13 @@ const TTL_CHOICES = [
   { value: "none", label: "Never" },
 ] as const;
 
-/**
- * Creating a sandbox is a decision, not a destination: four fields, then it
- * closes. A dialog keeps the fleet behind it, so the new machine lands in the
- * list you were already reading instead of replacing the page.
- *
- * Layout follows the order you actually decide in — how big, how long, what to
- * call it — with each choice visible at once. Auto-stop is a segmented row
- * rather than a select because a nested popover inside a dialog is two clicks
- * and a floating layer for four fixed options.
- */
+const NETWORK_CHOICES: { value: NetworkMode; label: string }[] = [
+  { value: "default", label: "Default" },
+  { value: "open", label: "Public" },
+  { value: "deny", label: "None" },
+  { value: "allow", label: "Allowlist" },
+];
+
 export function CreateSandboxDialog({
   open,
   onOpenChange,
@@ -53,6 +50,7 @@ export function CreateSandboxDialog({
     ttlSeconds: number | null;
     name?: string;
     runtime?: string;
+    network?: NetworkPolicy;
   }) => Promise<void>;
 }) {
   const first = sizes[0]?.name;
@@ -60,6 +58,8 @@ export function CreateSandboxDialog({
   const [ttl, setTtl] = useState<string>("3600");
   const [name, setName] = useState("");
   const [runtime, setRuntime] = useState(AUTO_RUNTIME);
+  const [networkMode, setNetworkMode] = useState<NetworkMode>("default");
+  const [allowText, setAllowText] = useState("");
 
   useEffect(() => {
     if (type && sizes.some((size) => size.name === type)) return;
@@ -72,16 +72,25 @@ export function CreateSandboxDialog({
     setTtl("3600");
     setName("");
     setRuntime(AUTO_RUNTIME);
+    setNetworkMode("default");
+    setAllowText("");
   }
 
+  const allowEntries = allowText.split(/[\s,]+/).flatMap((item) => {
+    const trimmed = item.trim();
+    return trimmed ? [trimmed] : [];
+  });
+  const allowInvalid = networkMode === "allow" && allowEntries.length === 0;
+
   function submit() {
-    if (busy || !type) return;
+    if (busy || !type || allowInvalid) return;
 
     const input: {
       type: SandboxType;
       ttlSeconds: number | null;
       name?: string;
       runtime?: string;
+      network?: NetworkPolicy;
     } = {
       type,
       ttlSeconds: ttl === "none" ? null : Number(ttl),
@@ -90,6 +99,13 @@ export function CreateSandboxDialog({
     if (name.trim()) input.name = name.trim();
 
     if (runtime !== AUTO_RUNTIME) input.runtime = runtime;
+
+    if (networkMode !== "default") {
+      input.network =
+        networkMode === "allow"
+          ? { mode: "allow", allow: allowEntries }
+          : { mode: networkMode, allow: [] };
+    }
 
     void onCreate(input).then(() => {
       reset();
@@ -177,6 +193,28 @@ export function CreateSandboxDialog({
             />
           </fieldset>
 
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-base font-medium tracking-wide text-muted-foreground">
+              Network
+            </legend>
+            <Segmented
+              label="Network"
+              options={NETWORK_CHOICES}
+              value={networkMode}
+              onChange={(next) => setNetworkMode(next)}
+            />
+            {networkMode === "allow" && (
+              <Input
+                className="text-base"
+                value={allowText}
+                placeholder="github.com, *.npmjs.org"
+                aria-label="Allowed domains or public IPs"
+                spellCheck={false}
+                onChange={(event) => setAllowText(event.target.value)}
+              />
+            )}
+          </fieldset>
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="sandbox-name" className="text-base font-medium text-muted-foreground">
               Name <span className="font-normal text-muted-foreground/60">optional</span>
@@ -218,7 +256,12 @@ export function CreateSandboxDialog({
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" form="create-sandbox" size="sm" disabled={busy || !type}>
+          <Button
+            type="submit"
+            form="create-sandbox"
+            size="sm"
+            disabled={busy || !type || allowInvalid}
+          >
             {busy ? "Creating…" : "Create Sandbox"}
           </Button>
         </DialogFooter>

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import type { SandboxType } from "@spaces/shared/sandbox";
+import type { NetworkPolicy, SandboxType } from "@spaces/shared/sandbox";
 import { ApiError, LIVE_STATES, api } from "@/lib/api.ts";
 import { usePoll } from "@/lib/use-poll.ts";
 import type { Act } from "../types.ts";
@@ -34,6 +34,7 @@ export function useSandboxes() {
     ttlSeconds: number | null;
     name?: string;
     runtime?: string;
+    network?: NetworkPolicy;
   }) => act("create", () => api.createSandbox(input), "Sandbox created").then(() => undefined);
 
   return { poll, rows, live, busy, act, create };
