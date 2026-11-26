@@ -7,6 +7,5 @@ export interface HostedPort {
   access: "private" | "public";
   title: string | null;
   localhost: boolean;
-  /** True when adding the mapping required restarting the microVM. */
   restartRequired: boolean;
 }

@@ -1,10 +1,3 @@
-/**
- * Deterministic tests for the networking policy mapping.
- *
- * Item 7 of the conformance pass is "document that `public` denies private
- * addresses and show how to allow one". Documentation that is not tied to code
- * rots, so the mapping itself is tested here: profile -> flags.
- */
 import { describe, expect, test } from "bun:test";
 import { networkArgsFor, restoreNetworkArgsFor, rootDiskArgsFor } from "./microsandbox.ts";
 
@@ -18,8 +11,6 @@ const base = {
 
 describe("SPACES_NET -> msb flags", () => {
   test("default public: a profile, not a free pass", () => {
-    // `public` is a profile: public addresses reachable, private denied. That is
-    // why a guest cannot reach a LAN or tailnet address until it is allowed.
     expect(networkArgsFor(base)).toEqual(["--net", "public"]);
   });
 

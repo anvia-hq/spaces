@@ -10,10 +10,8 @@ import { requireSandbox } from "../sandboxes/service.ts";
 import { withSpan } from "../traces/tracer.ts";
 import type { SnapshotRowLike } from "./types.ts";
 
-/** Root the snapshot tree is relative to: the sandbox workdir. */
 const TREE_ROOT = SANDBOX_WORKDIR;
 
-/** Entries beyond this are dropped and the answer is marked truncated. */
 const TREE_LIMIT = 20_000;
 
 export function shapeSnapshot(row: SnapshotRow) {
@@ -88,7 +86,6 @@ async function createInner(id: string, name?: string) {
   }
 }
 
-/** Boot a snapshot in a throwaway sandbox, run fn, then always tear it down. */
 async function withSnapshotRestore<T>(
   snapshot: SnapshotRowLike,
   fn: (ref: string, driver: SandboxDriver) => Promise<T>,
@@ -120,10 +117,6 @@ async function requireSnapshot(snapshotId: string): Promise<SnapshotRowLike> {
   return row;
 }
 
-/**
- * Flat file listing of a snapshot, cached after the first read: a manifest is
- * immutable once captured, so it is stored on the snapshot row.
- */
 export async function snapshotTree(snapshotId: string) {
   const snapshot = await requireSnapshot(snapshotId);
 
@@ -159,16 +152,11 @@ function shapeTree(
   };
 }
 
-/**
- * Bytes of one path inside a snapshot. A directory is returned as a tar, a file
- * as its raw content, so the caller's `Range` handling stays uniform.
- */
 export async function snapshotFileEntry(
   snapshotId: string,
   path: string,
 ): Promise<{ bytes: Uint8Array; kind: "file" | "dir"; name: string }> {
   const snapshot = await requireSnapshot(snapshotId);
-  // Stay inside the tree root: strip leading slashes and any `..` segment.
   const relative = path
     .replace(/^\/+/, "")
     .split("/")
@@ -186,7 +174,6 @@ export async function snapshotFileEntry(
   };
 }
 
-/** Snapshot deletion, both by id and for a whole sandbox. */
 export async function deleteSnapshot(snapshotId: string) {
   const row = await store.getSnapshot(snapshotId);
 
@@ -198,7 +185,6 @@ export async function deleteSnapshot(snapshotId: string) {
       .catch(() => {});
 
   await store.removeSnapshot(row.id);
-  // A saved snapshot cannot outlive its artifact: drop the name and its codes.
   const orphaned = await store.deleteSavedSnapshotsBySnapshotId(row.id);
   const deleted: { id: string; removedSavedSnapshots?: string[] } = { id: row.id };
 
@@ -221,12 +207,10 @@ export async function deleteSandboxSnapshots(sandboxId: string) {
   }
   return { sandboxId, deleted: rows.length };
 }
-/** Where a snapshot download token resolves to a tar stream. */
 export const SNAPSHOT_DOWNLOAD_PATH = "/api/v1/_snapshot-download";
 
-/** A short-lived signed URL that streams this snapshot's workdir as a tar. */
 export async function mintSnapshotDownload(snapshotId: string, origin: string) {
-  const snapshot = await snapshotTree(snapshotId); // 404s when unknown
+  const snapshot = await snapshotTree(snapshotId);
   const token = await mintTransferToken({
     m: "GET",
     s: snapshot.sandboxId,

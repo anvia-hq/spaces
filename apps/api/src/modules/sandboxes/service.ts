@@ -265,8 +265,6 @@ export async function sandboxEvents(id: string, after: number) {
   const rows = await store.listEvents(id, after);
 
   return rows.map((e) => ({
-    // Payload first: it may contain a `type` of its own (e.g. the machine
-    // size on sandbox.created) and must not shadow the event discriminator.
     ...e.payload,
     id: e.id,
     type: e.type,
@@ -297,7 +295,6 @@ export async function updateSandbox(
   return (await store.get(id))!;
 }
 
-/** boat's StopOperation shape. */
 export function stopOperation(row: {
   id: string;
   status: string;
@@ -321,7 +318,6 @@ export function stopOperation(row: {
 export async function getStopOperation(id: string, stopId: string) {
   await requireSandbox(id);
   const row = await store.getStop(stopId);
-  // Unknown ids and ids of another sandbox are both 404.
 
   if (!row || row.sandboxId !== id) {
     throw new ServiceError("not_found", `no stop ${stopId} for sandbox ${id}`);
@@ -330,11 +326,6 @@ export async function getStopOperation(id: string, stopId: string) {
   return stopOperation(row);
 }
 
-/**
- * Stop and archive. A stop is an operation: the row is created before any work
- * so a caller can always poll it, and a failed save leaves the sandbox running
- * with the stop marked `failing` rather than discarding the disk.
- */
 export async function stopSandbox(
   id: string,
   options: { force?: boolean } = {},
@@ -347,8 +338,6 @@ async function stopInner(
   options: { force?: boolean } = {},
 ): Promise<{ stopId: string; stop: ReturnType<typeof stopOperation>; sandbox: Sandbox }> {
   const sandbox = await requireSandbox(id);
-
-  // Already archived: hand back the last stop, as boat does.
 
   if (sandbox.state === "archived") {
     const existing = await store.pendingStop(id);
@@ -384,7 +373,6 @@ async function stopInner(
 
   const driver = driverFor(sandbox.runtimeId);
 
-  // Reuse an in-flight stop so repeat calls return the same id.
   let stopRow = await store.pendingStop(id);
 
   if (!stopRow) {
@@ -423,7 +411,6 @@ async function stopInner(
     await store.event(id, "sandbox.stopped", { diskRef });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    // Keep the sandbox running: a refused stop must not discard the disk.
     await store.update(id, { state: "error", error: message });
     await store.updateStop(stopRow.id, {
       status: "failing",
@@ -540,7 +527,6 @@ async function resumeInner(
   return (await store.get(id))!;
 }
 
-/** Fork clones the source's disk into a brand new sandbox. */
 export async function forkSandbox(
   id: string,
   overrides: Partial<CreateSandboxRequest> = {},
@@ -613,10 +599,6 @@ async function forkInner(
   return (await store.get(newId_))!;
 }
 
-/**
- * Run the operator's bootstrap snippet. A failure is recorded as an event and
- * ignored: a sandbox that boots is still useful without extra packages.
- */
 async function runBootstrap(id: string, driver: SandboxDriver, ref: string): Promise<void> {
   const script = config.bootstrap.trim();
 
@@ -627,7 +609,6 @@ async function runBootstrap(id: string, driver: SandboxDriver, ref: string): Pro
     const result = await driver.exec(ref, {
       command: script,
       timeoutSeconds: config.bootstrapTimeoutSeconds,
-      // Operator plumbing: `apk add` and friends need root.
       runAs: "root",
     });
     const payload: { ms: number; exitCode: number | null; stderr?: string } = {
@@ -698,20 +679,12 @@ async function destroyInner(id: string): Promise<void> {
   const driver = driverFor(sandbox.runtimeId);
   try {
     await driver.destroy(id);
-  } catch {
-    // Deleting a sandbox whose machine already died must still succeed.
-  }
-  // Published ports are host-side state; the rows must not outlive the machine
-  // or the host port stays reserved in the allocator.
+  } catch {}
   await store.deletePortsOf(id);
   await store.event(id, "sandbox.deleted");
   await store.remove(id);
 }
 
-/**
- * Power-cycle a sandbox that stopped answering. The disk is untouched, which is
- * exactly what a microVM restart is.
- */
 export async function recoverSandbox(id: string) {
   const sandbox = await requireSandbox(id);
 
@@ -724,7 +697,6 @@ export async function recoverSandbox(id: string) {
 
   const driver = driverFor(sandbox.runtimeId);
 
-  // A reachable sandbox needs no recovery.
   const reachable = await driver
     .exec(`msb:${id}`, { command: "true", timeoutSeconds: 5 })
     .then((r) => r.exitCode === 0)
@@ -740,8 +712,6 @@ export async function recoverSandbox(id: string) {
   const last = await store.get(id);
 
   if (last && Date.now() - Date.parse(last.updatedAt ?? last.createdAt) < 10 * 60 * 1000) {
-    // boat refuses a second recover within 10 minutes.
-
     if ((await store.allEvents(id)).some((e) => e.type === "sandbox.recover")) {
       throw new ServiceError(
         "sandbox_not_ready",

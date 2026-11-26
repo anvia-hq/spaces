@@ -2,7 +2,6 @@ import { newId } from "@spaces/shared/errors";
 import { now, store } from "../../db.ts";
 import type { ActorKind, AuditEntry } from "./types.ts";
 
-/** The only writer. There is deliberately no update or delete here. */
 export async function record(entry: AuditEntry): Promise<void> {
   await store.insertAudit({
     id: newId("aud"),
@@ -37,7 +36,6 @@ export interface AuditFilter {
   cursor?: string;
 }
 
-/** `at` then `id`: pages do not shift while the log grows at the head. */
 function decodeCursor(cursor: string | undefined): { at: Date; id: string } | null {
   if (!cursor) return null;
 

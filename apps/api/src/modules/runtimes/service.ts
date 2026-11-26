@@ -391,11 +391,6 @@ export async function pickRuntime(request: SchedulingRequest = {}): Promise<Runt
   );
 }
 
-/**
- * One row per online runtime, for the capacity history the Cluster page draws
- * (decision 0045). Offline machines are skipped: a zero would read as "empty",
- * and the console already has the state badge for "not there".
- */
 export async function sampleCluster(): Promise<number> {
   await ensureLocalRuntime();
   const [rows, load] = await Promise.all([store.listRuntimes(), store.runtimeLoad()]);
@@ -423,7 +418,6 @@ export async function sampleCluster(): Promise<number> {
   return samples.length;
 }
 
-/** The samples of the last `minutes`, oldest first, for the charts. */
 export async function clusterSamples(
   minutes: number,
   runtimeId?: string,

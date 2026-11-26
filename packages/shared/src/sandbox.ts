@@ -182,23 +182,8 @@ export const NetworkPolicySchema = z
   });
 export type NetworkPolicy = z.infer<typeof NetworkPolicySchema>;
 
-/**
- * Boat-compatible wire contracts.
- * Source of truth: docs/boat-openapi.yaml (`Boat Public API v1`).
- * Only the subset this product actually serves is modelled here.
- */
-
-/**
- * Machine sizes are operator-owned rows (see /machine-sizes and decision 0034),
- * so `type` on the wire is a preset name, not a closed enum: a client may only
- * use one that exists and has not been retired.
- */
 export const MACHINE_SIZE_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 
-/**
- * The four presets every deployment starts with (migration 0004). Only the
- * default name is load-bearing: it is what a create without `type` gets.
- */
 export const DEFAULT_MACHINE_SIZE = "default";
 
 export const RETIRED_MACHINE_SIZE = "retired_machine_size";
@@ -218,7 +203,6 @@ export const MachineSizeSchema = z.object({
 });
 export type MachineSize = z.infer<typeof MachineSizeSchema>;
 
-/** Boat's `Sandbox.state` enum, verbatim and in order. */
 export const SandboxState = z.enum([
   "init",
   "provisioning",
@@ -234,7 +218,6 @@ export const SandboxState = z.enum([
 ]);
 export type SandboxState = z.infer<typeof SandboxState>;
 
-/** Terminal / settled states used for filtering. */
 export const STATES_SETTLED: SandboxState[] = ["ready", "idle", "running"];
 export const STATES_STOPPED: SandboxState[] = ["archived"];
 
@@ -401,7 +384,6 @@ export const CommandResponse = z.object({
 });
 export type CommandResponse = z.infer<typeof CommandResponse>;
 
-/** JSONL frame emitted when `stream: true` (application/x-ndjson). */
 export type CommandStreamFrame =
   | { type: "started"; commandId: string; startedAt: string }
   | { type: "stdout"; data: string }

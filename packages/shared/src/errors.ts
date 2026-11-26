@@ -1,8 +1,3 @@
-/**
- * Boat-compatible error envelope.
- * Shape taken from `ErrorEnvelope` in docs/boat-openapi.yaml — both a flat
- * set of fields and the nested `error` object, because boat returns both.
- */
 export interface ErrorEnvelope {
   ok: false;
   type: string;
@@ -18,7 +13,6 @@ export interface ErrorEnvelope {
   };
 }
 
-/** Error codes observed in the boat spec. Extra ones are additive, never renamed. */
 export const ErrorCodes = {
   unauthorized: 401,
   forbidden: 403,
@@ -89,10 +83,6 @@ export function newRequestId(): string {
   return `req_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
 }
 
-/**
- * Boat ids use a Crockford-ish alphabet with no lookalike characters
- * (no 0/1/l/o/i) — see the `Sandbox.id` pattern. Match it so ids look native.
- */
 const ID_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
 
 export function newSandboxId(): string {

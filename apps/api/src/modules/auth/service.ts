@@ -10,12 +10,6 @@ import * as audit from "../audit/service.ts";
 import { promoteIfListed } from "./admins.ts";
 import { ADMIN_ROLES } from "./roles.ts";
 
-/**
- * GitHub is a provider only when the deployment set both halves of the pair:
- * an unset client id or secret leaves the key out of the map, and Better Auth
- * never learns the provider exists. A server with no GitHub app still boots,
- * and email + password still signs people in (docs/decision/0037).
- */
 const socialProviders: BetterAuthOptions["socialProviders"] = config.auth.github.enabled
   ? {
       github: {
@@ -25,14 +19,6 @@ const socialProviders: BetterAuthOptions["socialProviders"] = config.auth.github
     }
   : {};
 
-/**
- * Better Auth owns the account tables and the `/api/auth/*` surface: sign-up,
- * sign-in, sign-out and the session cookie the console rides on. The API key
- * plugin adds user-owned keys, which the API accepts as a Bearer credential
- * alongside the operator key (docs/decision/0028). The admin plugin owns `role`
- * and `banned` on the user row, which is how an account acts as an operator
- * (docs/decision/0037).
- */
 export const auth = betterAuth({
   appName: "spaces",
   basePath: "/api/auth",
@@ -49,18 +35,8 @@ export const auth = betterAuth({
   session: {
     expiresIn: config.auth.sessionDays * 24 * 60 * 60,
     updateAge: 24 * 60 * 60,
-    /**
-     * Every authenticated `/api/v1` request re-reads the user row, so a role
-     * change applies at once. Better Auth refused its own admin endpoints on a
-     * session older than a day; the API's gates would not have, and two answers
-     * to "is this admin" is one too many.
-     */
     freshAge: 0,
   },
-  /**
-   * Authentication is audited here rather than in a route: Better Auth owns
-   * `/api/auth/*`, so its hooks are the only place that sees a sign-in.
-   */
   databaseHooks: {
     user: {
       create: {
@@ -112,11 +88,6 @@ export const auth = betterAuth({
       },
     },
   },
-  /**
-   * Better Auth's `/admin/*` endpoints stay off `/api/auth`: promoting and
-   * banning is `/api/v1/users/*`, where one gate decides and the audit
-   * middleware sees every change. The plugin stays for its schema and roles.
-   */
   disabledPaths: [
     "/admin/set-role",
     "/admin/get-user",

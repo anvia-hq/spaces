@@ -1,13 +1,5 @@
 import { SQL } from "bun";
 
-/**
- * Test environment, loaded before any test file imports `config`.
- *
- * `config` is built once at import time from `process.env`, so this pins the
- * driver and the database before anything reads it. The database is dropped and
- * re-created here, not per test file, because every file in a run shares one
- * process and the API applies migrations when it boots.
- */
 process.env.SPACES_DRIVER = "mock";
 process.env.SPACES_DATABASE_URL =
   process.env.SPACES_TEST_DATABASE_URL ?? "postgres://localhost:5432/spaces_test";

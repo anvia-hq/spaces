@@ -4,13 +4,6 @@ import { verifyTransferToken } from "../files/sign.ts";
 import { driverOfSandbox } from "../runtimes/service.ts";
 import { previewPath, resolvePreview } from "./service.ts";
 
-/**
- * Reverse proxy for a published port.
- *
- * The guest has no public address, so the API forwards the request to the host
- * port msb published. A preview URL is usable straight from a browser, so it
- * authenticates with its own `_token` rather than the bearer header.
- */
 export const proxyPreview: Handler<ApiEnv> = async (c) => {
   const sandboxId = c.req.param("sandboxId")!;
   const guestPort = Number(c.req.param("port"));
@@ -49,7 +42,6 @@ export const proxyPreview: Handler<ApiEnv> = async (c) => {
     }
   }
 
-  // Everything after /<port> is the guest's own path.
   const url = new URL(c.req.url);
   const marker = `/api/v1/_preview/${sandboxId}/${guestPort}`;
   const suffix = url.pathname.slice(marker.length) || "/";
@@ -74,7 +66,6 @@ export const proxyPreview: Handler<ApiEnv> = async (c) => {
   });
 
   const responseHeaders = new Headers(upstream.headers);
-  // Length and encoding describe the upstream body, not necessarily this one.
   responseHeaders.delete("content-encoding");
   responseHeaders.delete("content-length");
   responseHeaders.delete("transfer-encoding");

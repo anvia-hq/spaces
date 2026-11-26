@@ -48,7 +48,6 @@ export const snapshotsRouter = new Hono<ApiEnv>()
       "x-snapshot-entry-kind": entry.kind,
     };
 
-    // Files honour a single `Range: bytes=` header so downloads can resume.
     const range = /^bytes=(\d*)-(\d*)$/.exec(c.req.header("range") ?? "");
 
     if (entry.kind === "file" && range) {
@@ -80,10 +79,6 @@ export const snapshotsRouter = new Hono<ApiEnv>()
     const result = await deleteSandboxSnapshots(c.req.param("sandboxId"));
     return c.json({ ok: true as const, type: "snapshot.deleted" as const, ...result });
   })
-  /**
-   * Chunk manifest for reconstructing a snapshot. We keep one artifact per
-   * snapshot, so the chain is a single chunk that streams a tar of the workdir.
-   */
   .get("/snapshots/:snapshotId/download", async (c) => {
     const download = await mintSnapshotDownload(c.req.param("snapshotId"), publicOrigin(c.req.url));
 
@@ -113,7 +108,6 @@ export const snapshotsRouter = new Hono<ApiEnv>()
       ],
     });
   })
-  /** Streams the tar behind a snapshot download token. */
   .get("/_snapshot-download/:snapshotId", async (c) => {
     const entry = await snapshotFileEntry(c.req.param("snapshotId"), "");
     return new Response(entry.bytes, {

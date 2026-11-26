@@ -76,9 +76,7 @@ export function useTerminal(sandboxId: string) {
             stopPolling();
             void history.refresh();
           }
-        } catch {
-          // A poll failing is not fatal; the next tick may succeed.
-        }
+        } catch {}
       }, 700);
     },
     [sandboxId, stopPolling, history],

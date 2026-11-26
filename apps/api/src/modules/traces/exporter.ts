@@ -14,7 +14,6 @@ const KINDS: Record<number, string> = {
   [SpanKind.CONSUMER]: "consumer",
 };
 
-/** Long strings (a command line, a URL) are truncated, never stored whole. */
 function clamp(value: unknown): unknown {
   if (typeof value === "string") {
     return value.length > MAX_ATTRIBUTE_LENGTH ? `${value.slice(0, MAX_ATTRIBUTE_LENGTH)}…` : value;
@@ -60,10 +59,6 @@ function toRecord(span: ReadableSpan): SpanRecord {
   };
 }
 
-/**
- * Spans into the same Postgres as everything else, so a self-hosted server can
- * explain itself without a collector (decision 0032).
- */
 export class PostgresSpanExporter implements SpanExporter {
   constructor(private readonly write: (spans: SpanRecord[]) => Promise<void>) {}
 

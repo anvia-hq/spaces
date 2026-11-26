@@ -7,13 +7,6 @@ import type { AuditEntry } from "@/lib/api.ts";
 import { fmtDuration, timeAgo } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
-/**
- * The audit log as a table.
- *
- * Rows used to be flex containers with a `break-all` blob in the middle, which
- * at full width produced a single unreadable column of joined text. Columns
- * give each fact a home: what happened, who did it, to what, and how it ended.
- */
 export function AuditGrid({ entries }: { entries: AuditEntry[] }) {
   const columns = useMemo<ColumnDef<AuditEntry, unknown>[]>(
     () => [

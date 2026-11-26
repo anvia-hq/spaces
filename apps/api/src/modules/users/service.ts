@@ -58,11 +58,6 @@ export async function listUsers(input: {
   };
 }
 
-/**
- * `admin` or `user`, nothing else: a role the plugin cannot authorise is a role
- * nobody can reason about. The last admin cannot be demoted, because then no
- * account could promote anybody back (docs/decision/0037).
- */
 export async function setRole(userId: string, role: AdminRole) {
   if (await refusesLastAdmin(userId, role)) {
     throw new ServiceError("forbidden", "This is the last admin; promote somebody else first.");

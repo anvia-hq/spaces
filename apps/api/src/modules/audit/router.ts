@@ -8,7 +8,6 @@ export const auditRouter = new Hono<ApiEnv>()
     const page = await listAudit(c.req.valid("query"));
     return c.json({ ok: true as const, type: "audit.list" as const, ...page });
   })
-  /** Which action names this deployment has actually produced. */
   .get("/audit-log/actions", async (c) => {
     const actions = await auditSummary();
     return c.json({ ok: true as const, type: "audit.actions" as const, actions });

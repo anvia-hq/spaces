@@ -1,14 +1,3 @@
-/**
- * GitHub sign-in is configured by the environment and by nothing else: both
- * halves of the OAuth pair register the provider, either half missing leaves it
- * out, and `/api/v1/me` reports the same answer to the console.
- *
- * Each case boots the API in a subprocess (`src/testing/boot-probe.ts`) because
- * `config` and the Better Auth instance are built at import time. No case
- * reaches github.com: a sign-in attempt is answered by Better Auth itself —
- * `404` with no provider, a redirect to GitHub's authorize URL with one
- * (docs/decision/0036).
- */
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 

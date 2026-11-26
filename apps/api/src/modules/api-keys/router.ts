@@ -5,10 +5,6 @@ import type { AuthUser } from "../auth/types.ts";
 import { CreateApiKeyRequest } from "./schema.ts";
 import { createApiKey, listApiKeys, revokeApiKey } from "./service.ts";
 
-/**
- * Keys are managed by a signed-in person, never by a key: a leaked key must not
- * be able to mint another. The operator key answers 403 here with the reason.
- */
 function signedIn(c: Context<ApiEnv>): AuthUser | null {
   const principal = c.get("principal");
 

@@ -1,11 +1,3 @@
-/**
- * The audit log: every mutation, once, with who and where from.
- *
- * Runs on the mock driver like the rest of the suite. The interesting properties
- * are coverage (a route nobody remembered still lands), that a reader who can
- * sign in reads the whole cluster's log (decision 0044), and the keyset page
- * (it keeps walking while the log grows).
- */
 import { describe, expect, test } from "bun:test";
 
 const { app } = await import("../../app.ts");

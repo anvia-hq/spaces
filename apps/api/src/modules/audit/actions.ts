@@ -1,14 +1,6 @@
-/**
- * Route template ("POST /sandboxes/:sandboxId/stop") -> action name and target.
- *
- * A route that is not listed still gets a row: the middleware falls back to the
- * method and the first segment of the template. Adding the mapping is how the
- * log becomes readable, and the UI shows the raw fallback until then.
- */
 export interface RouteAction {
   action: string;
   targetType?: string;
-  /** Which route param names the target. */
   targetParam?: string;
 }
 

@@ -49,7 +49,6 @@ export async function listSavedSnapshots(filter?: { name?: string; namePrefix?: 
   return (await store.listSavedSnapshots(filter)).map(savedSnapshot);
 }
 
-/** What a wallet pays for saved snapshots. Personal wallets include 10. */
 export async function savedSnapshotAllowance() {
   const used = (await store.listSavedSnapshots()).length;
   const included = 10;
@@ -68,10 +67,6 @@ export async function savedSnapshotAllowance() {
   };
 }
 
-/**
- * Freeze a sandbox's disk under a name. Re-saving a name replaces that
- * snapshot's artifact; the old one is released first so storage does not grow.
- */
 export async function saveNamedSnapshot(sandboxId: string, name: string) {
   if (!SAVED_NAME.test(name)) {
     throw new ServiceError(
@@ -84,8 +79,6 @@ export async function saveNamedSnapshot(sandboxId: string, name: string) {
     throw new ServiceError("invalid_body", `name ${name} is reserved`);
   }
 
-  // Names are unique server-wide, so a name taken by another account must be
-  // refused rather than silently taken over by the upsert below.
   const owner = await store.savedSnapshotOwner(name);
 
   if (owner !== undefined && owner !== currentOwnerId()) {
@@ -95,8 +88,6 @@ export async function saveNamedSnapshot(sandboxId: string, name: string) {
   const sandbox = await requireSandbox(sandboxId);
   driverFor(sandbox.runtimeId);
   const existing = await store.getSavedSnapshot(name);
-
-  // A replace has to release the previous artifact.
 
   if (existing?.snapshotId) {
     const previous = await store.getSnapshot(existing.snapshotId);

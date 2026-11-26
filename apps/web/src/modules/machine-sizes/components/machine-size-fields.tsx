@@ -38,7 +38,6 @@ function whole(value: string, range: { min: number; max: number }): number | nul
   return parsed;
 }
 
-/** The numbers the API accepts, or null when a field is out of range. */
 export function parseMachineSizeFields(fields: MachineSizeFields): ParsedMachineSize | null {
   const vcpu = whole(fields.vcpu, RANGE.vcpu);
   const memMib = whole(fields.memMib, RANGE.memMib);

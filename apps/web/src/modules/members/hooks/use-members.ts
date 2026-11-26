@@ -5,7 +5,6 @@ import { ApiError, api, type ManagedUser } from "@/lib/api.ts";
 
 export type Members = ReturnType<typeof useMembers>;
 
-/** The accounts on this deployment, and the two things an admin changes about them. */
 export function useMembers() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [total, setTotal] = useState(0);

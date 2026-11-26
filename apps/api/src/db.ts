@@ -59,20 +59,17 @@ export type { RuntimeSampleRow, SavedSnapshotRow } from "@spaces/db";
 const handle = createDb(config.databaseUrl);
 export const db = handle.db;
 
-/** Migrations run once, before the first request can reach the store. */
 await handle.migrate();
 
 export type { CommandRow, RuntimeRow, SandboxRow, SnapshotRow };
 
 export const now = () => new Date().toISOString();
 
-/** ISO-8601 on the wire, `Date` in the driver: two helpers, one direction each. */
 export const iso = (value: Date | null): string | null => (value ? value.toISOString() : null);
 
 const at = (value: string | null | undefined): Date | null =>
   value === null || value === undefined ? null : new Date(value);
 
-/** First row of a query, or null — Postgres has no `.get()`. */
 export async function one<T>(query: PromiseLike<T[]>): Promise<T | null> {
   const rows = await query;
   return rows[0] ?? null;
@@ -348,8 +345,6 @@ const rawStore = {
     return row ? row.env : {};
   },
 
-  /* -------------------------------------------------------- machine sizes */
-
   async insertMachineSize(s: {
     name: string;
     vcpu: number;
@@ -411,7 +406,6 @@ const rawStore = {
     await db.update(machineSizes).set(values).where(eq(machineSizes.name, name));
   },
 
-  /** How many sandboxes were created at this size, retired or not. */
   async countOfType(type: string): Promise<number> {
     const rows = await db
       .select({ n: sql<number>`count(*)::int` })
@@ -419,8 +413,6 @@ const rawStore = {
       .where(eq(sandboxes.type, type));
     return Number(rows[0]?.n ?? 0);
   },
-
-  /* ------------------------------------------------------------ snapshots */
 
   async listSnapshots(sandboxId?: string): Promise<SnapshotRow[]> {
     const owner = scopedOwner();
@@ -466,8 +458,6 @@ const rawStore = {
     await db.delete(snapshots).where(eq(snapshots.id, id));
   },
 
-  /* ------------------------------------------------------------- commands */
-
   async insertCommand(c: {
     id: string;
     sandboxId: string;
@@ -488,7 +478,6 @@ const rawStore = {
     });
   },
 
-  /** Public id alias for the command record. */
   async commandById(id: string): Promise<CommandRow | null> {
     const row = await one(db.select().from(commands).where(eq(commands.id, id)));
     return row && (await this.raw(row.sandboxId)) ? row : null;
@@ -498,7 +487,6 @@ const rawStore = {
     await db.update(commands).set({ killed: true }).where(eq(commands.id, id));
   },
 
-  /** Resolve a public `processId` (guest pid) to its command record. */
   async findCommandByPid(sandboxId: string, pid: number): Promise<CommandRow | null> {
     if (!(await this.raw(sandboxId))) return null;
 
@@ -548,8 +536,6 @@ const rawStore = {
     const row = await one(db.select().from(commands).where(eq(commands.id, id)));
     return row && (await this.raw(row.sandboxId)) ? row : null;
   },
-
-  /* --------------------------------------------------------- ports */
 
   async insertPort(r: {
     id: string;
@@ -618,8 +604,6 @@ const rawStore = {
     );
     return row?.runtimeId ?? null;
   },
-
-  /* ------------------------------------------------------------- runtimes */
 
   async listRuntimes(): Promise<RuntimeRow[]> {
     return db.select().from(runtimes).orderBy(asc(runtimes.name));
@@ -814,8 +798,6 @@ const rawStore = {
     await db.delete(sandboxPorts).where(eq(sandboxPorts.sandboxId, sandboxId));
   },
 
-  /* ------------------------------------------------------ saved snapshots */
-
   async upsertSavedSnapshot(r: {
     name: string;
     status: "saving" | "ready" | "failed";
@@ -870,7 +852,6 @@ const rawStore = {
     return scoped.orderBy(desc(savedSnapshots.createdAt));
   },
 
-  /** The owner of a saved name, ignoring scope: names are unique server-wide. */
   async savedSnapshotOwner(name: string): Promise<string | null | undefined> {
     const row = await one(
       db
@@ -890,7 +871,6 @@ const rawStore = {
     await db.delete(savedSnapshots).where(eq(savedSnapshots.name, name));
   },
 
-  /** Saved snapshots that pointed at an artifact that no longer exists. */
   async deleteSavedSnapshotsBySnapshotId(snapshotId: string): Promise<string[]> {
     const rows = await db
       .select()
@@ -948,8 +928,6 @@ const rawStore = {
     await db.delete(snapshotShares).where(eq(snapshotShares.name, name));
   },
 
-  /* ---------------------------------------------------------------- stops */
-
   async insertStop(s2: {
     id: string;
     sandboxId: string;
@@ -1001,7 +979,6 @@ const rawStore = {
     return one(db.select().from(stops).where(eq(stops.id, id)));
   },
 
-  /** Most recent stop id for a sandbox, completed or not. */
   async lastStopId(sandboxId: string): Promise<string | null> {
     const row = await one(
       db
@@ -1013,7 +990,6 @@ const rawStore = {
     return row?.id ?? null;
   },
 
-  /** The stop currently in flight for a sandbox, if any. */
   async pendingStop(sandboxId: string): Promise<StopRow | null> {
     return one(
       db
@@ -1024,14 +1000,11 @@ const rawStore = {
     );
   },
 
-  /** Every event of a sandbox, oldest first — the usage meter walks these. */
   async allEvents(sandboxId: string): Promise<EventRow[]> {
     if (!(await this.raw(sandboxId))) return [];
 
     return db.select().from(events).where(eq(events.sandboxId, sandboxId)).orderBy(asc(events.id));
   },
-
-  /* --------------------------------------------------------------- events */
 
   async event(sandboxId: string, type: string, payload: Record<string, unknown> = {}) {
     await db.insert(events).values({ sandboxId, type, payload, at: at(now())! });
@@ -1077,8 +1050,6 @@ const rawStore = {
     };
   },
 
-  /* ----------------------------------------------------------------- spans */
-
   async insertSpans(
     spans: {
       traceId: string;
@@ -1107,7 +1078,6 @@ const rawStore = {
     );
   },
 
-  /** Recent traces: one row per trace id, with its root span's shape. */
   async listTraces(
     filter: { traceId?: string; requestId?: string; name?: string; status?: "ok" | "error" },
     limit: number,
@@ -1155,8 +1125,6 @@ const rawStore = {
         rootName: root.name,
         route: typeof route === "string" ? route : null,
         method: typeof method === "string" ? method : null,
-        // The request's own outcome, not a swallowed child failure: a mock
-        // driver refusing port publishing is not a failed request.
         status: (http ?? root).statusCode === "error" ? "error" : "ok",
         requestId: root.requestId,
         spanCount: group.length,
@@ -1196,7 +1164,6 @@ const rawStore = {
     }));
   },
 
-  /** Request rate, error rate, latency percentiles and lifecycle durations. */
   async traceMetrics(windowMinutes: number) {
     const owner = scopedOwner();
     const since = new Date(Date.now() - windowMinutes * 60_000);
@@ -1242,7 +1209,6 @@ const rawStore = {
     };
   },
 
-  /** Retention: spans older than the cutoff, oldest first, in batches. */
   async sweepSpans(olderThan: string): Promise<number> {
     const rows = await db
       .delete(spans_)
@@ -1251,8 +1217,6 @@ const rawStore = {
 
     return rows.length;
   },
-
-  /* ------------------------------------------------------------- audit log */
 
   async insertAudit(row: {
     id: string;
@@ -1325,7 +1289,6 @@ const rawStore = {
       .limit(limit);
   },
 
-  /** Distinct actions seen, newest first — the console's filter options. */
   async auditActions(): Promise<string[]> {
     const owner = scopedOwner();
     const rows = await db
@@ -1335,12 +1298,10 @@ const rawStore = {
     return rows.map((row) => row.action).sort();
   },
 
-  /** Host capacity, deliberately not scoped: the limit protects this machine. */
   async totalSandboxes(): Promise<number> {
     const rows = await db.select({ n: sql<number>`count(*)::int` }).from(sandboxes);
     return Number(rows[0]?.n ?? 0);
   },
 };
 
-/** Every store method runs inside its own span (decision 0032). */
 export const store = tracedStore(rawStore);

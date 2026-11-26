@@ -8,11 +8,6 @@ import type {
 } from "@spaces/shared/sandbox";
 
 const BASE = "/api/v1";
-/*
- * Requests authenticate with the Better Auth session cookie, so there is no
- * bearer header here and nothing to store. The operator key is a server-side
- * credential for API clients; the console does not use it.
- */
 
 export class ApiError extends Error {
   constructor(
@@ -22,11 +17,9 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
-  /** The server refused the key that was sent. */
   get isUnauthorized() {
     return this.status === 401 || this.status === 403;
   }
-  /** Errors the caller can act on rather than retry blindly. */
   get isConflict() {
     return this.status === 409;
   }
@@ -54,7 +47,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     body = text ? JSON.parse(text) : {};
   } catch {
-    // A non-JSON body is still a valid failure; keep the text for the message.
     body = { message: text.slice(0, 300) };
   }
 
@@ -69,8 +61,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   return body as T;
 }
-
-/* ------------------------------------------------------------------ sandboxes */
 
 export interface SandboxEvent {
   id: number;
@@ -120,7 +110,6 @@ export interface SandboxUsage {
 export interface PublishedPort {
   port: number;
   hostPort: number;
-  /** False for ports reserved at create time that nobody asked for yet. */
   explicit: boolean;
   title: string | null;
   access: "private" | "public";
@@ -178,14 +167,10 @@ export interface SnapshotTree {
 }
 
 export const api = {
-  /** Health lives outside /api/v1 and needs no auth. */
   health: async () => {
     const res = await fetch("/health");
 
     if (!res.ok) throw new ApiError(res.status, "health_failed", res.statusText);
-
-    // A dev server without a /health proxy answers with the SPA fallback, which
-    // is a 200 full of HTML. Say so instead of failing on a JSON parse.
 
     if (!(res.headers.get("content-type") ?? "").includes("application/json")) {
       throw new ApiError(
@@ -272,8 +257,6 @@ export const api = {
     return request<SandboxUsage>(`/sandboxes/${id}/usage${suffix}`);
   },
 
-  /* --------------------------------------------------------------- commands */
-
   runCommand: (id: string, command: string, opts?: { cwd?: string; timeoutSeconds?: number }) =>
     request<{
       exitCode: number | null;
@@ -288,7 +271,6 @@ export const api = {
       body: JSON.stringify({ command, ...opts }),
     }),
 
-  /** Launch in the background; poll with `commandStatus` or attach to the stream. */
   startProcess: (id: string, command: string, opts?: { cwd?: string; timeoutSeconds?: number }) =>
     request<{
       type: "command.started";
@@ -383,9 +365,6 @@ export const api = {
     }>(`/sandboxes/${id}/command-history/${commandId}/logs${suffix}`);
   },
 
-  /* ------------------------------------------------------------ networking */
-
-  /** Added to this server, not part of boat's contract: the ports it published. */
   publishedPorts: (id: string) => request<{ ports: PublishedPort[] }>(`/sandboxes/${id}/ports`),
 
   hostPort: (
@@ -408,8 +387,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ key }),
     }),
-
-  /* ------------------------------------------------------------- snapshots */
 
   savedSnapshots: () =>
     request<{ snapshots: SavedSnapshot[]; allowance: Record<string, unknown> }>("/saved-snapshots"),
@@ -434,13 +411,9 @@ export const api = {
       `/snapshots/${snapshotId}/download`,
     ),
 
-  /** Direct URL for one path inside a snapshot (file bytes or a folder tar). */
   snapshotFileUrl: (snapshotId: string, path: string) =>
     `${BASE}/snapshots/${snapshotId}/files?path=${encodeURIComponent(path)}`,
 
-  /* -------------------------------------------------------- machine sizes */
-
-  /** Every preset this deployment offers, active ones only unless asked. */
   machineSizes: (options?: { includeRetired?: boolean }) =>
     request<{ sizes: MachineSize[] }>(
       `/machine-sizes${options?.includeRetired ? "?includeRetired=true" : ""}`,
@@ -472,14 +445,6 @@ export const api = {
       method: "DELETE",
     }),
 
-  /* ------------------------------------------------------------- identity */
-
-  /**
-   * Who this browser is: the operator key, a user session, or a user key; whether
-   * it may act as the operator; and which alternative sign-in providers the
-   * server has credentials for, so the auth screen never offers a button it
-   * cannot honour.
-   */
   me: () =>
     request<{
       principal: MePrincipal;
@@ -488,8 +453,6 @@ export const api = {
       admin: boolean;
       login: LoginProviders;
     }>("/me"),
-
-  /* ------------------------------------------------------------- api keys */
 
   listApiKeys: () => request<{ keys: ApiKeyEntry[] }>("/api-keys"),
 
@@ -501,8 +464,6 @@ export const api = {
 
   revokeApiKey: (id: string) =>
     request<{ id: string; status: "revoked" }>(`/api-keys/${id}`, { method: "DELETE" }),
-
-  /* -------------------------------------------------------------- runtimes */
 
   listRuntimes: () => request<{ runtimes: Runtime[] }>("/runtimes"),
 
@@ -534,8 +495,6 @@ export const api = {
       method: "DELETE",
     }),
 
-  /* --------------------------------------------------------------- members */
-
   listUsers: (query: { search?: string; limit?: number; offset?: number } = {}) => {
     const params = new URLSearchParams();
 
@@ -564,8 +523,6 @@ export const api = {
   unbanUser: (userId: string) =>
     request<{ user: ManagedUser }>(`/users/${userId}/ban`, { method: "DELETE" }),
 
-  /* --------------------------------------------------------------- audit */
-
   auditLog: (query: AuditQuery) => {
     const params = new URLSearchParams();
 
@@ -578,8 +535,6 @@ export const api = {
   },
 
   auditActions: () => request<{ actions: string[] }>("/audit-log/actions"),
-
-  /* -------------------------------------------------------------- traces */
 
   traces: (query: TraceQuery) => {
     const params = new URLSearchParams();
@@ -599,13 +554,6 @@ export const api = {
     request<{ traceId: string; spans: SpanRecord[] }>(`/traces/${traceId}`),
 };
 
-/**
- * Stream a command as it runs.
- *
- * The server answers `application/x-ndjson`, so frames arrive as they are
- * produced instead of at the end. The reader is cancelled when the caller stops
- * iterating, which closes the response.
- */
 export async function* streamCommand(
   sandboxId: string,
   command: string,
@@ -637,9 +585,7 @@ export async function* streamCommand(
       const parsed = JSON.parse(text) as { message?: string; code?: string };
       message = parsed.message ?? message;
       code = parsed.code ?? code;
-    } catch {
-      /* keep the status text */
-    }
+    } catch {}
     yield { type: "error", error: code, message };
     return;
   }
@@ -669,8 +615,6 @@ export async function* streamCommand(
 
   if (tail) yield JSON.parse(tail);
 }
-
-/* -------------------------------------------------------------------- files */
 
 export interface FileEntry {
   name: string;
@@ -799,7 +743,6 @@ export interface AuditEntry {
   metadata: Record<string, unknown>;
 }
 
-/** Non-password sign-in the server can complete (docs/decision/0036). */
 export type LoginProviders = { github: boolean };
 
 export type MePrincipal =
@@ -814,7 +757,6 @@ export type MePrincipal =
       admin: boolean;
     };
 
-/** One account, as `/users` returns it. */
 export interface ManagedUser {
   id: string;
   email: string;

@@ -1,12 +1,3 @@
-/**
- * Operator-owned machine sizes: the table is the only source of presets.
- *
- * Runs on the mock driver like the rest of the suite. What matters here is that
- * the four seeded presets are unchanged for existing clients, that only the
- * operator key may change them, that a retired name stops being choosable while
- * the sandboxes already using it stay readable, and that the driver is handed
- * the numbers from the table rather than a built-in list.
- */
 import { describe, expect, test } from "bun:test";
 
 const { app } = await import("../../app.ts");

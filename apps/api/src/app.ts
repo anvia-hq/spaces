@@ -70,12 +70,6 @@ app.onError(errorHandler);
 
 mountConsole(app);
 
-/**
- * Unknown paths answer in the same envelope as every other failure. Without
- * this, a mistyped endpoint returns Hono's plain-text `404 Not Found` and a
- * client parsing the error body gets nothing useful — the one place the
- * contract was still leaking through.
- */
 app.notFound((c) => {
   const path = new URL(c.req.url).pathname;
 

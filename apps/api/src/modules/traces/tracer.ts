@@ -14,10 +14,6 @@ import type { SpanRecord } from "./types.ts";
 
 let provider: BasicTracerProvider | null = null;
 
-/**
- * Start tracing once, with the writer that stores spans. Called from `app.ts`
- * so a test that imports the app traces like the server does; idempotent.
- */
 export function startTracing(write: (spans: SpanRecord[]) => Promise<void>): void {
   if (provider || !config.traces.enabled) return;
 
@@ -48,7 +44,6 @@ export function startTracing(write: (spans: SpanRecord[]) => Promise<void>): voi
   trace.setGlobalTracerProvider(provider);
 }
 
-/** Tests and shutdown: hand everything buffered to the writer now. */
 export async function flushTraces(): Promise<void> {
   await provider?.forceFlush();
 }
@@ -57,7 +52,6 @@ export function tracer(): Tracer {
   return trace.getTracer("spaces");
 }
 
-/** A span around work that is not a proxy target: provisioning, stop, snapshot. */
 export async function withSpan<T>(
   name: string,
   attributes: Record<string, unknown>,

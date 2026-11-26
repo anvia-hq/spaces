@@ -10,13 +10,6 @@ export const Route = createRootRoute({
   notFoundComponent: NotFound,
 });
 
-/**
- * Nothing in the console renders before we know who is asking.
- *
- * The gate lives here rather than in per-route guards so there is exactly one
- * place that decides, and no page can forget to check: signed out means the
- * auth screen and nothing else — no navigation, no empty tables, no banners.
- */
 function Root() {
   const { auth, signOut } = useAuth();
   useThemeShortcut();
@@ -36,7 +29,6 @@ function Root() {
   );
 }
 
-/** One frame of nothing, instead of a flash of the wrong screen. */
 function Booting() {
   return (
     <div className="flex min-h-dvh items-center justify-center">

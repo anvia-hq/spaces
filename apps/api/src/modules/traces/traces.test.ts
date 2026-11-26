@@ -1,9 +1,3 @@
-/**
- * Tracing: one span per request, child spans for the work, and the queries the
- * console needs (decisions 0031, 0032).
- *
- * Spans leave through a batch processor, so the tests flush before asserting.
- */
 import { describe, expect, test } from "bun:test";
 
 const { app } = await import("../../app.ts");
@@ -55,14 +49,12 @@ async function traces(query = "limit=50"): Promise<Trace[]> {
   return body.traces;
 }
 
-/** Provisioning runs in the background; wait for it before flushing spans. */
 async function waitUntilReady(id: string) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const res = await call("GET", `/api/v1/sandboxes/${id}`);
     const body = (await res.json()) as { sandbox: { state: string } };
 
     if (body.sandbox.state === "ready" || body.sandbox.state === "error") {
-      // The provisioning span ends just after the state flips.
       await Bun.sleep(25);
       return body.sandbox.state;
     }

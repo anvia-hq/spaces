@@ -18,10 +18,6 @@ import {
 const OPERATOR_ONLY =
   "Machine sizes are operator-owned: sign in as an admin, or send the operator key (SPACES_API_KEY).";
 
-/**
- * The operator key and an account with the admin role, one predicate: a second
- * definition of "may act as the operator" is how the two drift apart (0036).
- */
 function operatorOnly(c: Context<ApiEnv>) {
   if (mayOperate(c.get("principal"))) return null;
 

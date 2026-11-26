@@ -26,14 +26,6 @@ function sshHostOf(runtime: RuntimeRow, origin: string): string {
 const SSH_PUBLIC_KEY =
   /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521))\s+AAAA[A-Za-z0-9+/=]+(\s+.*)?$/;
 
-/**
- * Authorize a public key for SSH and bring up sshd in the guest.
- *
- * The guest has no public address, so the answer carries `sshEndpoint`
- * (`host:port`) rather than `machineIp`, exactly the case boat's schema
- * describes. The port is published *before* sshd starts, because adding a
- * mapping restarts the microVM and would kill the daemon it just launched.
- */
 export async function configureSandboxSsh(id: string, publicKey: string, origin: string) {
   const { sandbox, ref, driver } = await requireLiveSandbox(id);
   const runtime = await requireRuntime(sandbox.runtimeId);
@@ -53,19 +45,14 @@ export async function configureSandboxSsh(id: string, publicKey: string, origin:
     );
   }
 
-  // 1. Publish guest 22 first: this may restart the microVM.
   const hosted = await hostSandboxPort(id, { port: 22 }, origin);
 
-  // 2. Install sshd and authorize the key (disk changes, so a restart is safe).
   const setup = await driver.exec(ref, {
     runAs: "root",
     command: [
       "set -e",
       "command -v sshd >/dev/null 2>&1 || { command -v apk >/dev/null 2>&1 && apk add --no-cache openssh >/dev/null 2>&1; }",
       "id user >/dev/null 2>&1 || adduser -D -s /bin/sh user >/dev/null 2>&1 || true",
-      // adduser leaves the account locked (`!` in /etc/shadow), and OpenSSH
-      // refuses even pubkey logins for a locked account. Give it an unusable
-      // random hash: PasswordAuthentication stays off, so it only unlocks it.
       `echo "user:$(head -c 24 /dev/urandom | base64)" | chpasswd 2>/dev/null || true`,
       "mkdir -p /home/user/.ssh",
       "chmod 700 /home/user/.ssh",
@@ -77,7 +64,6 @@ export async function configureSandboxSsh(id: string, publicKey: string, origin:
       "echo SETUP_OK",
     ].join("\n"),
     timeoutSeconds: 240,
-    // The key travels as an argument, never interpolated into the script.
     args: [key],
   });
 
@@ -88,7 +74,6 @@ export async function configureSandboxSsh(id: string, publicKey: string, origin:
     );
   }
 
-  // 3. Start sshd detached (a plain background job would block the exec).
   const start = await driver.exec(ref, {
     runAs: "root",
     command: [

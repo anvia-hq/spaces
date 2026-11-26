@@ -6,13 +6,6 @@ import type { AuditHint } from "./types.ts";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-/**
- * One row for every authenticated mutation under /api/v1, however it ends.
- *
- * The route template names the action and the target, so a route added later is
- * audited without anyone remembering to; a handler that knows a created id can
- * say so with `c.set("audit", { targetId })`.
- */
 export const auditMutations: MiddlewareHandler<ApiEnv> = async (c, next) => {
   const method = c.req.method.toUpperCase();
 
@@ -48,7 +41,6 @@ export const auditMutations: MiddlewareHandler<ApiEnv> = async (c, next) => {
   });
 };
 
-/** The `code` of our error envelope, when the response is one. */
 async function failureCode(response: Response): Promise<string | null> {
   const type = response.headers.get("content-type") ?? "";
 

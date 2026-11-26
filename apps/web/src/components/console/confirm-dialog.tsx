@@ -25,7 +25,6 @@ export function ConfirmDialog({
   onConfirm,
 }: {
   trigger?: ReactNode;
-  /** Accessible name for an icon-only trigger. */
   triggerLabel?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;

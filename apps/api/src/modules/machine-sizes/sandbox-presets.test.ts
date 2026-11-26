@@ -1,10 +1,3 @@
-/**
- * Sandbox creation reads presets from the operator's table, not from a constant.
- *
- * Separate file because it creates and waits for sandboxes while the suite
- * clears the database between files: every request here is issued after this
- * file's own import of the app, which applies the migrations.
- */
 import { describe, expect, test } from "bun:test";
 
 const { app } = await import("../../app.ts");

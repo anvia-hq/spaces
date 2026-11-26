@@ -4,11 +4,6 @@ import { mayOperate } from "./admins.ts";
 import { loginConfig } from "./login-config.ts";
 import { adminRole, type MeAnswer } from "./types.ts";
 
-/**
- * Who the console is talking to. `admin` is the one field it needs to decide
- * whether to show an operator surface; `role`, `operator` and `login` say why
- * and what else the deployment offers.
- */
 export const meRouter = new Hono<ApiEnv>().get("/me", (c) => {
   const principal = c.get("principal");
   const admin = mayOperate(principal);

@@ -39,8 +39,6 @@ export const filesRouter = new Hono<ApiEnv>()
     const { path, encoding } = c.req.valid("query");
     const { bytes, size } = await readSandboxFile(c.req.param("sandboxId"), path);
 
-    // Honour the requested encoding, but fall back to base64 for non-UTF-8 bytes
-    // rather than returning mojibake.
     const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
     const validUtf8 = !utf8.includes("\uFFFD");
 
@@ -158,7 +156,6 @@ export const filesRouter = new Hono<ApiEnv>()
     );
     return c.json({ ok: true, type: "file.upload_url", ...minted });
   })
-  /** Raw artifact download: the file bytes, authenticated by the bearer token. */
   .get("/sandboxes/:sandboxId/artifacts", validate("query", FileInfoQuery), async (c) => {
     const { path } = c.req.valid("query");
     const { bytes } = await readSandboxFileRaw(c.req.param("sandboxId"), path);

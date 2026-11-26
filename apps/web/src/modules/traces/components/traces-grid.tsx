@@ -6,15 +6,6 @@ import { StatusBadge } from "@/components/console/status-badge";
 import { fmtDuration, timeAgo } from "@/lib/format.ts";
 import type { TraceSummary } from "@/lib/api.ts";
 
-/**
- * Traces as a table, not as a list of flex rows.
- *
- * The previous version was a `<ul>` where each row was a flex container, so
- * every column started wherever the previous cell ended: at full width the
- * method sat against the left edge and the duration against the right, with
- * the route floating somewhere between. A grid gives fixed column widths,
- * headers, and numbers that line up down the column.
- */
 export function TracesGrid({
   traces,
   onOpen,
@@ -108,7 +99,6 @@ export function TracesGrid({
   );
 }
 
-/** Milliseconds under a second, `fmtDuration` above it. */
 export function fmtLatency(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`;
 

@@ -1,15 +1,5 @@
-/**
- * Conformance tests against `docs/boat-openapi.yaml`.
- *
- * These run on the `mock` driver: no hypervisor, no microVMs, no network. They
- * cover the request surface — what a boat client is allowed to send and what
- * comes back — because that is where the reported deviations were, and it is
- * the part that can be checked deterministically on any machine.
- */
 import { describe, expect, test } from "bun:test";
 
-// Environment comes from test/setup.ts (bunfig preload), so module order cannot
-// change which driver these tests run against.
 const { app } = await import("../src/app.ts");
 
 const KEY = "test_key";
@@ -45,7 +35,6 @@ async function createSandbox(json: Record<string, unknown> = {}) {
   return { res, body, id: body.sandbox?.id };
 }
 
-/** Poll until the sandbox reaches one of `states`. */
 async function waitFor(id: string, states: string[], timeoutMs = 4000) {
   const deadline = Date.now() + timeoutMs;
   let last = "";
@@ -293,7 +282,6 @@ describe("an empty JSON body means {}", () => {
   });
 
   test("a body with no content-length header is also treated as {}", async () => {
-    // Chunked/streamed bodies: the length hint is absent, so the body is peeked.
     const headers = new Headers({
       authorization: `Bearer ${KEY}`,
       "content-type": "application/json",
@@ -319,13 +307,10 @@ describe("an empty JSON body means {}", () => {
   });
 
   test("a non-JSON empty body is left alone", async () => {
-    // An empty octet-stream upload must stay empty, not become {}.
     const res = await call("POST", "/api/v1/sandboxes", {
       rawBody: "",
       contentType: "application/octet-stream",
     });
-    // No JSON body to parse: validation sees {} through the schema default
-    // rather than receiving a rewritten body.
     expect([202, 400]).toContain(res.status);
   });
 });

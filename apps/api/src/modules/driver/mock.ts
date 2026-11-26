@@ -11,20 +11,12 @@ import type {
   SandboxDriver,
 } from "./types.ts";
 
-/** Every successful restore, in order, so a test can see which disk booted. */
 export const mockRestores: { sandboxId: string; fromRef: string }[] = [];
 
-/**
- * In-process driver. No KVM, no SSH — it models the lifecycle so the API and
- * UI are fully exercisable on any machine.
- */
 export class MockDriver implements SandboxDriver {
   readonly kind = "mock";
-  // Files need a guest transport; the mock has none, so it reports the gap
-  // honestly instead of pretending.
   readonly capabilities = { exec: true, files: false, persistence: true };
 
-  /** ref -> booted, at the size the caller resolved. */
   private live = new Map<string, { size: MachineSpec; bootedAt: number }>();
 
   private snapshots = new Set<string>();
@@ -112,8 +104,6 @@ export class MockDriver implements SandboxDriver {
     await this.jitter(90);
     const finishedAt = new Date().toISOString();
 
-    // A few commands are answered with plausible machine output; anything else
-    // echoes so the UI has something honest to render.
     const cmd = request.command.trim();
     let stdout = "";
     let exitCode = 0;
@@ -197,8 +187,6 @@ export class MockDriver implements SandboxDriver {
     return this.filesUnsupported();
   }
 
-  /* ---- processes: not modelled by the fixture ---- */
-
   async startProcess(): Promise<{ pid: number; logPath: string; errLogPath: string }> {
     return this.filesUnsupported();
   }
@@ -233,8 +221,6 @@ export class MockDriver implements SandboxDriver {
   > {
     return this.filesUnsupported();
   }
-
-  /* ---- file operations: not modelled by the fixture ---- */
 
   private filesUnsupported(): never {
     throw new DriverUnsupported(

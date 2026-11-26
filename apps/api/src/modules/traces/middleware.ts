@@ -2,11 +2,6 @@ import type { MiddlewareHandler } from "hono";
 import { SpanKind, context, trace } from "@opentelemetry/api";
 import type { ApiEnv } from "../../errors.ts";
 
-/**
- * One `http.request` span per request, and the parent of everything the request
- * does. The request id goes on the span so a trace can be found from the audit
- * log (decisions 0031, 0032).
- */
 export const traceRequests: MiddlewareHandler<ApiEnv> = async (c, next) => {
   const started = performance.now();
 
@@ -24,7 +19,6 @@ export const traceRequests: MiddlewareHandler<ApiEnv> = async (c, next) => {
       await next();
 
       const principal = c.get("principal");
-      // The matched template is only known once the request has been routed.
       span.setAttribute("http.route", c.req.routePath || c.req.path);
       span.setAttribute("http.status_code", c.res.status);
       span.setAttribute("spaces.actor_kind", principal?.kind ?? "anonymous");
