@@ -1,12 +1,14 @@
+import { z } from "zod";
 import { newId, newSandboxId } from "@spaces/shared/errors";
-import type {
-  CreateFileRequest,
-  CreateHostedPortRequest,
-  CreateSandboxRequest,
-  NetworkPolicy,
-  Sandbox,
-  SandboxState,
-  SandboxType,
+import {
+  SANDBOX_ID,
+  type CreateFileRequest,
+  type CreateHostedPortRequest,
+  type CreateSandboxRequest,
+  type NetworkPolicy,
+  type Sandbox,
+  type SandboxState,
+  type SandboxType,
 } from "@spaces/shared/sandbox";
 import { config } from "../../config.ts";
 import { iso, now, store, type RuntimeRow } from "../../db.ts";
@@ -28,6 +30,8 @@ function ttlToArchiveAfter(ttlSeconds: number | null): string | null {
 }
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const ISO_DATETIME = z.string().datetime();
+const inflightProvisions = new Map<string, Promise<void>>();
 
 export async function findIdempotentSandbox(key: string): Promise<Sandbox | null> {
   const existing = await store.getIdempotencyKey(key);
@@ -37,25 +41,90 @@ export async function findIdempotentSandbox(key: string): Promise<Sandbox | null
   return await store.get(existing);
 }
 
-export async function rememberIdempotentSandbox(key: string, sandboxId: string): Promise<void> {
-  await store.putIdempotencyKey(key, sandboxId, new Date(Date.now() + IDEMPOTENCY_TTL_MS));
-}
-
 export function parseSandboxCursor(raw: string): { at: Date; id: string } | null {
   const split = raw.indexOf("|");
 
   if (split <= 0 || split === raw.length - 1) return null;
 
-  const at = new Date(raw.slice(0, split));
+  const isoRaw = raw.slice(0, split);
+  const id = raw.slice(split + 1);
+
+  if (!ISO_DATETIME.safeParse(isoRaw).success || !SANDBOX_ID.test(id)) return null;
+
+  const at = new Date(isoRaw);
 
   if (Number.isNaN(at.getTime())) return null;
 
-  return { at, id: raw.slice(split + 1) };
+  return { at, id };
+}
+
+async function waitForProvision(promise: Promise<void>, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      promise.catch(() => {}),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function finishCreateWait(
+  id: string,
+  timeoutSeconds: number,
+  replayed: boolean,
+): Promise<{ sandbox: Sandbox; ready: boolean; replayed: boolean }> {
+  const deadline = Date.now() + timeoutSeconds * 1000;
+
+  while (true) {
+    const inflight = inflightProvisions.get(id);
+    const remaining = deadline - Date.now();
+
+    if (inflight && remaining > 0) {
+      await waitForProvision(inflight, remaining);
+    }
+
+    const sandbox = await store.get(id);
+
+    if (!sandbox) throw new ServiceError("not_found", `no sandbox ${id}`);
+
+    if (sandbox.state === "error") {
+      throw new ServiceError("internal", sandbox.error ?? "sandbox provisioning failed");
+    }
+
+    if (["ready", "running", "idle"].includes(sandbox.state)) {
+      return { sandbox, ready: true, replayed };
+    }
+
+    const left = deadline - Date.now();
+
+    if (inflight || left <= 0) {
+      return { sandbox, ready: false, replayed };
+    }
+
+    await waitForProvision(new Promise<void>(() => {}), Math.min(25, left));
+  }
 }
 
 export async function createSandbox(
   input: CreateSandboxRequest,
-): Promise<{ sandbox: Sandbox; ready: boolean }> {
+  idempotencyKey?: string,
+): Promise<{ sandbox: Sandbox; ready: boolean; replayed: boolean }> {
+  if (idempotencyKey) {
+    const existing = await findIdempotentSandbox(idempotencyKey);
+
+    if (existing) {
+      if (input.wait) {
+        return await finishCreateWait(existing.id, input.waitTimeoutSeconds, true);
+      }
+
+      return { sandbox: existing, ready: false, replayed: true };
+    }
+  }
+
   if ((await store.totalSandboxes()) >= config.limits.maxSandboxes) {
     throw new ServiceError(
       "forbidden",
@@ -66,6 +135,19 @@ export async function createSandbox(
   const size = await requireActiveMachineSize(input.type);
 
   const source = input.from ? await resolveCreateSource(input.from) : null;
+
+  if (source?.kind === "sandbox" && input.network) {
+    if (!sameNetworkPolicy(source.networkPolicy, input.network)) {
+      throw new ServiceError(
+        "network_policy_unsupported",
+        "fork inherits the source sandbox's network policy; create from a saved snapshot to apply a different policy",
+      );
+    }
+  }
+
+  const effectiveNetworkPolicy =
+    source?.kind === "sandbox" ? source.networkPolicy : (input.network ?? null);
+
   const scheduling: SchedulingRequest = { size };
 
   if (input.runtime) scheduling.pin = input.runtime;
@@ -73,6 +155,18 @@ export async function createSandbox(
   if (source) scheduling.sourceRuntimeId = source.runtimeId;
 
   const runtime = await pickRuntime(scheduling);
+
+  if (
+    effectiveNetworkPolicy &&
+    effectiveNetworkPolicy.mode !== "default" &&
+    source?.kind !== "sandbox" &&
+    runtime.capabilities?.networkPolicy !== true
+  ) {
+    throw new ServiceError(
+      "network_policy_unsupported",
+      `runtime ${runtime.name} does not support per-sandbox network policies; upgrade its runtime agent`,
+    );
+  }
 
   if (input.hostedPorts?.length && !portRangeOf(runtime)) {
     throw new ServiceError(
@@ -85,54 +179,66 @@ export async function createSandbox(
 
   const id = newSandboxId();
   const name = input.name ?? `Spaces ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
-  await store.insert({
+  const rowData = {
     id,
     name,
-    state: "provisioning",
+    state: "provisioning" as const,
     type: input.type,
     labels: input.labels,
     env: input.env,
     ttlSeconds: input.ttlSeconds,
     archiveAfter: ttlToArchiveAfter(input.ttlSeconds),
     runtimeId: runtime.id,
-    setupStatus: input.setupScript !== undefined ? "pending" : null,
-    networkPolicy: input.network ?? null,
-  });
-  await store.event(id, "sandbox.created", { type: input.type, runtime: runtime.name });
+    setupStatus: input.setupScript !== undefined ? ("pending" as const) : null,
+    networkPolicy: effectiveNetworkPolicy,
+  };
 
-  const provisioning = provision({
-    id,
-    runtime,
-    type: input.type,
-    size,
-    env: input.env,
-    source,
-    setupScript: input.setupScript,
-    hostedPorts: input.hostedPorts,
-    files: input.files,
-    network: input.network,
-  });
+  if (idempotencyKey) {
+    const claimed = await store.insertSandboxIdempotent(
+      idempotencyKey,
+      new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      rowData,
+    );
+
+    if (!claimed.created) {
+      if (input.wait) {
+        return await finishCreateWait(claimed.sandbox.id, input.waitTimeoutSeconds, true);
+      }
+
+      return { sandbox: claimed.sandbox, ready: false, replayed: true };
+    }
+  } else {
+    await store.insert(rowData);
+  }
+
+  const provisioning = store
+    .event(id, "sandbox.created", { type: input.type, runtime: runtime.name })
+    .then(() =>
+      provision({
+        id,
+        runtime,
+        type: input.type,
+        size,
+        env: input.env,
+        source,
+        setupScript: input.setupScript,
+        hostedPorts: input.hostedPorts,
+        files: input.files,
+        network: effectiveNetworkPolicy ?? undefined,
+      }),
+    );
+  const tracked = provisioning
+    .catch(() => {})
+    .finally(() => {
+      inflightProvisions.delete(id);
+    });
+  inflightProvisions.set(id, tracked);
 
   if (!input.wait) {
-    void provisioning.catch(() => {});
-    return { sandbox: (await store.get(id))!, ready: false };
+    return { sandbox: (await store.get(id))!, ready: false, replayed: false };
   }
 
-  const settled = await Promise.race([
-    provisioning.then(() => true),
-    Bun.sleep(input.waitTimeoutSeconds * 1000).then(() => false),
-  ]);
-
-  const sandbox = (await store.get(id))!;
-
-  if (sandbox.state === "error") {
-    throw new ServiceError("internal", sandbox.error ?? "sandbox provisioning failed");
-  }
-
-  return {
-    sandbox,
-    ready: settled && ["ready", "running", "idle"].includes(sandbox.state),
-  };
+  return await finishCreateWait(id, input.waitTimeoutSeconds, false);
 }
 
 interface ProvisionOptions {
@@ -168,7 +274,13 @@ async function writeCreateFiles(
       file.encoding === "base64"
         ? new Uint8Array(Buffer.from(file.content, "base64"))
         : encoder.encode(file.content);
-    await driver.writeFile(ref, file.path, bytes);
+
+    try {
+      await driver.writeFile(ref, file.path, bytes);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`failed to write ${file.path}: ${reason}`);
+    }
   }
 }
 
@@ -176,22 +288,38 @@ async function provisionInner(options: ProvisionOptions) {
   const { id, runtime, type, size, env, source, setupScript, hostedPorts, files, network } =
     options;
   const started = Date.now();
+  let driver: SandboxDriver | null = null;
+  let created = false;
 
   try {
     const ports = await reservePrepublishPorts(id, runtime, hostedPorts);
-    const driver = driverFor(runtime.id);
-    const driverOptions = { sandboxId: id, type, size, env, ports, network };
+    driver = driverFor(runtime.id);
     let handle: DriverHandle;
 
     if (!source) {
-      handle = await driver.create(driverOptions);
+      handle = await driver.create({ sandboxId: id, type, size, env, ports, network });
     } else if (source.kind === "snapshot") {
-      handle = await driver.restore({ ...driverOptions, fromRef: source.driverRef });
+      handle = await driver.restore({
+        sandboxId: id,
+        type,
+        size,
+        env,
+        ports,
+        network,
+        fromRef: source.driverRef,
+      });
     } else {
-      handle = await driver.fork({ ...driverOptions, fromRef: source.driverRef });
+      handle = await driver.fork({
+        sandboxId: id,
+        type,
+        size,
+        env,
+        ports,
+        fromRef: source.driverRef,
+      });
     }
 
-    await republishPorts(id, driver);
+    created = true;
     await runBootstrap(id, driver, handle.ref);
 
     if (files && files.length > 0) {
@@ -209,11 +337,23 @@ async function provisionInner(options: ProvisionOptions) {
     });
     await store.event(id, "sandbox.ready", { ms: Date.now() - started, ref: handle.ref });
 
-    if (setupScript !== undefined) void runSetupScript(id, driver, handle.ref, setupScript);
+    if (setupScript !== undefined) {
+      void runSetupScript(id, driver, handle.ref, setupScript).catch(() => {});
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
+    if (created && driver) await driver.destroy(id).catch(() => {});
+
     await store.deletePortsOf(id);
-    await store.update(id, { state: "error", error: message });
+    const patch: Parameters<typeof store.update>[1] = { state: "error", error: message };
+
+    if (setupScript !== undefined) {
+      patch.setupStatus = "failed";
+      patch.setupError = message;
+    }
+
+    await store.update(id, patch);
     await store.event(id, "sandbox.error", { message });
   }
 }
@@ -251,10 +391,6 @@ export async function getSandbox(id: string): Promise<Sandbox> {
 export async function getSandboxNetwork(id: string): Promise<NetworkPolicy> {
   const sandbox = await requireSandbox(id);
   return sandbox.network ?? { mode: "default", allow: [] };
-}
-
-export async function listSandboxes(filter: Parameters<typeof store.list>[0]) {
-  return await store.list(filter);
 }
 
 export async function listSandboxesPage(filter: Parameters<typeof store.listPage>[0]) {
@@ -536,11 +672,12 @@ export async function forkSandbox(
 
 function sameNetworkPolicy(a: NetworkPolicy | null | undefined, b: NetworkPolicy): boolean {
   const effectiveA: NetworkPolicy = a ?? { mode: "default", allow: [] };
-  return (
-    effectiveA.mode === b.mode &&
-    effectiveA.allow.length === b.allow.length &&
-    effectiveA.allow.every((entry, idx) => entry === b.allow[idx])
-  );
+
+  if (effectiveA.mode !== b.mode) return false;
+
+  const setA = new Set(effectiveA.allow);
+  const setB = new Set(b.allow);
+  return setA.size === setB.size && [...setA].every((entry) => setB.has(entry));
 }
 
 async function forkInner(
@@ -566,6 +703,7 @@ async function forkInner(
   const size = await requireActiveMachineSize(type);
   const runtime = await pickRuntime({ sourceRuntimeId: row.runtimeId, size });
   const env = overrides.env ?? (await store.env(id));
+  const ttlSeconds = overrides.ttlSeconds === undefined ? 3600 : overrides.ttlSeconds;
   await store.insert({
     id: newId_,
     name: overrides.name ?? `${source.name} (fork)`,
@@ -573,8 +711,8 @@ async function forkInner(
     type,
     labels: overrides.labels ?? source.labels,
     env,
-    ttlSeconds: overrides.ttlSeconds ?? 3600,
-    archiveAfter: ttlToArchiveAfter(overrides.ttlSeconds ?? 3600),
+    ttlSeconds,
+    archiveAfter: ttlToArchiveAfter(ttlSeconds),
     forkOf: id,
     runtimeId: runtime.id,
     networkPolicy: row.networkPolicy ?? null,
@@ -593,6 +731,7 @@ async function forkInner(
       id,
       driverRef: row.driverRef,
       runtimeId: row.runtimeId,
+      networkPolicy: row.networkPolicy ?? null,
     },
   }).catch(() => {});
 
@@ -633,9 +772,9 @@ async function runSetupScript(
   script: string,
 ): Promise<void> {
   const started = Date.now();
-  await store.update(id, { setupStatus: "running", setupError: null });
 
   try {
+    await store.update(id, { setupStatus: "running", setupError: null });
     const result = await driver.exec(ref, {
       command: script,
       timeoutSeconds: config.bootstrapTimeoutSeconds,

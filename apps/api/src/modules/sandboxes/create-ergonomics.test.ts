@@ -37,15 +37,26 @@ afterAll(async () => {
   server?.stop(true);
 });
 
-async function onlineFixtureRuntime(name: string) {
+async function onlineFixtureRuntime(
+  name: string,
+  options: {
+    driver?: FixtureDriver;
+    portRange?: { start: number; end: number } | null;
+  } = {},
+) {
   const created = await call("POST", "/api/v1/runtimes", { name });
   expect(created.status).toBe(201);
   const { runtime, token } = (await created.json()) as {
     runtime: { id: string; name: string };
     token: string;
   };
-  const driver = new FixtureDriver();
-  const { agent } = agentFor({ url: baseUrl, token, driver });
+  const driver = options.driver ?? new FixtureDriver();
+  const { agent } = agentFor({
+    url: baseUrl,
+    token,
+    driver,
+    portRange: options.portRange,
+  });
   agents.push(agent);
   await eventually(
     async () => {
@@ -167,5 +178,128 @@ describe("POST /sandboxes create ergonomics", () => {
       (s) => s.setupStatus === "failed",
     );
     expect(failFinal.setupError).toContain("exit 1");
+  });
+
+  test("wait: true returns 202 when waitTimeoutSeconds elapses before boot completes", async () => {
+    class SlowDriver extends FixtureDriver {
+      override async create(o: Parameters<FixtureDriver["create"]>[0]) {
+        await Bun.sleep(1300);
+        return await super.create(o);
+      }
+    }
+
+    const { runtime } = await onlineFixtureRuntime(`slow-${Date.now()}`, {
+      driver: new SlowDriver(),
+    });
+    const res = await call("POST", "/api/v1/sandboxes", {
+      name: "slow-box",
+      runtime: runtime.name,
+      wait: true,
+      waitTimeoutSeconds: 1,
+    });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { sandbox: { id: string; state: string } };
+    expect(body.sandbox.state).toBe("provisioning");
+
+    await eventually(
+      async () =>
+        (
+          (await (await call("GET", `/api/v1/sandboxes/${body.sandbox.id}`)).json()) as {
+            sandbox: { state: string };
+          }
+        ).sandbox.state,
+      (state) => state === "ready",
+    );
+  });
+
+  test("post-boot files write failure destroys the VM, reports the path, and fails wait: true with 500", async () => {
+    const destroyed: string[] = [];
+
+    class FailingWriteDriver extends FixtureDriver {
+      override async writeFile(): Promise<void> {
+        throw new Error("guest operation failed: EIO");
+      }
+
+      override async destroy(sandboxId: string): Promise<void> {
+        destroyed.push(sandboxId);
+        await super.destroy(sandboxId);
+      }
+    }
+
+    const { runtime } = await onlineFixtureRuntime(`fail-write-${Date.now()}`, {
+      driver: new FailingWriteDriver(),
+    });
+    const res = await call("POST", "/api/v1/sandboxes", {
+      name: "fail-files-box",
+      runtime: runtime.name,
+      wait: true,
+      files: [{ path: "/home/user/boom.txt", content: "x" }],
+    });
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { message: string };
+    expect(body.message).toContain("/home/user/boom.txt");
+    expect(destroyed.length).toBe(1);
+    const errored = await call("GET", `/api/v1/sandboxes/${destroyed[0]!}`);
+    expect(await errored.json()).toMatchObject({
+      sandbox: { state: "error" },
+    });
+  });
+
+  test("create-time files reject root directories, bad base64, whitespace bombs, and byte limits", async () => {
+    const invalidFiles = [
+      [{ path: "/home/user", content: "hi" }],
+      [{ path: "/tmp", content: "hi" }],
+      [{ path: "bad.bin", content: "not!valid!base64!!!", encoding: "base64" }],
+      [{ path: "spaces.bin", content: " ".repeat(1024), encoding: "base64" }],
+      [{ path: "big.txt", content: "a".repeat(5 * 1024 * 1024 + 1) }],
+      [
+        { path: "p1.txt", content: "a".repeat(4_500_000) },
+        { path: "p2.txt", content: "a".repeat(4_500_000) },
+        { path: "p3.txt", content: "a".repeat(4_500_000) },
+        { path: "p4.txt", content: "a".repeat(4_500_000) },
+        { path: "p5.txt", content: "a".repeat(4_500_000) },
+      ],
+    ];
+
+    for (const files of invalidFiles) {
+      const res = await call("POST", "/api/v1/sandboxes", { files });
+      expect({ count: files.length, path: files[0]?.path, status: res.status }).toEqual({
+        count: files.length,
+        path: files[0]?.path,
+        status: 400,
+      });
+    }
+  });
+
+  test("hostedPorts returns 501 on a runtime with port publishing disabled", async () => {
+    const { runtime } = await onlineFixtureRuntime(`noports-${Date.now()}`, {
+      portRange: null,
+    });
+    const res = await call("POST", "/api/v1/sandboxes", {
+      runtime: runtime.name,
+      hostedPorts: [{ port: 3000 }],
+    });
+    expect(res.status).toBe(501);
+  });
+
+  test("older runtime agent without networkPolicy capability fails closed with 409", async () => {
+    class LegacyDriver extends FixtureDriver {
+      override readonly capabilities = {
+        exec: true,
+        files: true,
+        persistence: true,
+      };
+    }
+
+    const { runtime } = await onlineFixtureRuntime(`legacy-${Date.now()}`, {
+      driver: new LegacyDriver(),
+    });
+    const res = await call("POST", "/api/v1/sandboxes", {
+      runtime: runtime.name,
+      network: { mode: "deny" },
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("network_policy_unsupported");
   });
 });

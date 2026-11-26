@@ -83,7 +83,12 @@ describe("POST /sandboxes request contract", () => {
     ];
     for (const payload of rejected) {
       const res = await post("/api/v1/sandboxes", payload);
-      expect({ payload, status: res.status }).toEqual({ payload, status: 400 });
+      const body = (await res.json()) as { code: string };
+      expect({ payload, status: res.status, code: body.code }).toEqual({
+        payload,
+        status: 400,
+        code: "invalid_body",
+      });
     }
   });
 
@@ -169,6 +174,17 @@ describe("POST /sandboxes/{id}/resume request contract", () => {
     const { operatorScope, runInScope } = await import("./scope.ts");
     expect(await runInScope(operatorScope, () => store.env(id))).toEqual({ A: "b" });
   });
+
+  test("resume with {} preserves existing env", async () => {
+    const id = await archivedSandbox();
+    const res = await post(`/api/v1/sandboxes/${id}/resume`, {});
+    expect(res.status).toBe(202);
+    await waitFor(id, ["ready", "running"]);
+
+    const { store } = await import("./db.ts");
+    const { operatorScope, runInScope } = await import("./scope.ts");
+    expect(await runInScope(operatorScope, () => store.env(id))).toEqual({ INITIAL: "1" });
+  });
 });
 
 describe("sandbox list pagination, idempotency, patch and fork env", () => {
@@ -206,10 +222,32 @@ describe("sandbox list pagination, idempotency, patch and fork env", () => {
       )
     ).json()) as { sandboxes: { id: string }[] };
     expect(stopped.sandboxes.map((s) => s.id)).toEqual([ids[0]!]);
+
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const noneBeforePast = (await (
+      await get(`/api/v1/sandboxes?namePrefix=${prefix}&stoppedBefore=${encodeURIComponent(past)}`)
+    ).json()) as { sandboxes: { id: string }[] };
+    expect(noneBeforePast.sandboxes).toEqual([]);
+
+    const descPage = (await (
+      await get(`/api/v1/sandboxes?namePrefix=${prefix}&limit=2&sort=createdAt:desc`)
+    ).json()) as { sandboxes: { id: string }[]; nextCursor: string | null };
+    expect(descPage.sandboxes.map((s) => s.id)).toEqual([ids[2]!, ids[1]!]);
+    expect(descPage.nextCursor).not.toBeNull();
+
+    for (const badCursor of ["", "not-a-cursor", "12345|foo", "2026-01-01T00:00:00.000Z|bad"]) {
+      const bad = await get(`/api/v1/sandboxes?cursor=${encodeURIComponent(badCursor)}`);
+      const badBody = (await bad.json()) as { code: string };
+      expect({ badCursor, status: bad.status, code: badBody.code }).toEqual({
+        badCursor,
+        status: 400,
+        code: "invalid_query",
+      });
+    }
   });
 
-  test("Idempotency-Key persists in Postgres and deduplicates creates", async () => {
-    const key = `idem-${Date.now()}`;
+  test("Idempotency-Key deduplicates concurrent creates, validates bounds, and sweeps expired keys", async () => {
+    const key = `idem-race-${Date.now()}`;
     const req = () =>
       app.request("/api/v1/sandboxes", {
         method: "POST",
@@ -218,15 +256,50 @@ describe("sandbox list pagination, idempotency, patch and fork env", () => {
           "content-type": "application/json",
           "idempotency-key": key,
         },
-        body: JSON.stringify({ name: "idempotent-box" }),
+        body: JSON.stringify({ name: "idempotent-box", wait: true }),
       });
 
-    const first = (await (await req()).json()) as { sandbox: { id: string } };
-    const second = (await (await req()).json()) as { sandbox: { id: string } };
-    expect(second.sandbox.id).toBe(first.sandbox.id);
+    const responses = await Promise.all([req(), req(), req()]);
+    const bodies = await Promise.all(
+      responses.map(async (r) => ({
+        status: r.status,
+        body: (await r.json()) as { sandbox: { id: string } },
+      })),
+    );
+    const uniqueIds = new Set(bodies.map((b) => b.body.sandbox.id));
+    expect(uniqueIds.size).toBe(1);
+    expect(bodies.every((b) => b.status === 201)).toBe(true);
+
+    const badBlank = await app.request("/api/v1/sandboxes", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${KEY}`,
+        "content-type": "application/json",
+        "idempotency-key": "   ",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(badBlank.status).toBe(400);
+
+    const badLong = await app.request("/api/v1/sandboxes", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${KEY}`,
+        "content-type": "application/json",
+        "idempotency-key": "k".repeat(256),
+      },
+      body: JSON.stringify({}),
+    });
+    expect(badLong.status).toBe(400);
 
     const { store } = await import("./db.ts");
-    expect(await store.getIdempotencyKey(key)).toBe(first.sandbox.id);
+    const [sandboxId] = [...uniqueIds];
+    expect(await store.getIdempotencyKey(key)).toBe(sandboxId!);
+
+    const expiredKey = `idem-exp-${Date.now()}`;
+    await store.putIdempotencyKey(expiredKey, sandboxId!, new Date(Date.now() - 1000));
+    expect(await store.getIdempotencyKey(expiredKey)).toBeNull();
+    expect(await store.sweepIdempotencyKeys(new Date())).toBeGreaterThanOrEqual(1);
   });
 
   test("PATCH /sandboxes/{id} clears labels with null", async () => {

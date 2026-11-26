@@ -11,6 +11,7 @@ export async function resolveCreateSource(from: string): Promise<CreateSource> {
       id: sandbox.id,
       driverRef: sandbox.driverRef,
       runtimeId: sandbox.runtimeId,
+      networkPolicy: sandbox.networkPolicy ?? null,
     };
   }
 

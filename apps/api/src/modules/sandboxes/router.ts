@@ -12,7 +12,6 @@ import {
 import {
   createSandbox,
   destroySandbox,
-  findIdempotentSandbox,
   forkSandbox,
   getSandbox,
   getSandboxNetwork,
@@ -20,7 +19,6 @@ import {
   listSandboxesPage,
   parseSandboxCursor,
   recoverSandbox,
-  rememberIdempotentSandbox,
   resumeSandbox,
   sandboxEvents,
   stopSandbox,
@@ -38,9 +36,9 @@ function labelList(label: string | string[] | undefined): string[] {
 export const sandboxesRouter = new Hono<ApiEnv>()
   .get("/sandboxes", validate("query", SandboxListQuery), async (c) => {
     const q = c.req.valid("query");
-    const cursor = q.cursor ? parseSandboxCursor(q.cursor) : undefined;
+    const cursor = q.cursor !== undefined ? parseSandboxCursor(q.cursor) : undefined;
 
-    if (q.cursor && !cursor) {
+    if (q.cursor !== undefined && !cursor) {
       return fail(c, "invalid_query", "cursor must be <iso-timestamp>|<sandboxId>");
     }
 
@@ -64,29 +62,23 @@ export const sandboxesRouter = new Hono<ApiEnv>()
   })
   .post("/sandboxes", validate("json", CreateSandboxRequest), async (c) => {
     const input = c.req.valid("json");
-    const key = c.req.header("idempotency-key");
+    const rawKey = c.req.header("idempotency-key");
+    let key: string | undefined;
 
-    if (key) {
-      const existing = await findIdempotentSandbox(key);
+    if (rawKey !== undefined) {
+      key = rawKey.trim();
 
-      if (existing) {
-        const status =
-          input.wait && ["ready", "running", "idle"].includes(existing.state) ? 201 : 202;
-        return c.json(
-          { ok: true, type: "sandbox.created", status: existing.state, sandbox: existing },
-          status,
-        );
+      if (!key || key.length > 255) {
+        return fail(c, "invalid_body", "Idempotency-Key must be 1-255 characters");
       }
     }
 
-    const { sandbox, ready } = await createSandbox(input);
-
-    if (key) await rememberIdempotentSandbox(key, sandbox.id);
+    const { sandbox, ready, replayed } = await createSandbox(input, key);
 
     c.set("audit", {
       targetId: sandbox.id,
       targetType: "sandbox",
-      metadata: { type: sandbox.type, name: sandbox.name },
+      metadata: { type: sandbox.type, name: sandbox.name, replayed },
     });
 
     return c.json(

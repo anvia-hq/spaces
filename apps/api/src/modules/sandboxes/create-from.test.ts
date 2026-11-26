@@ -186,7 +186,6 @@ afterEach(async () => {
 
   await runInScope(operatorScope, async () => {
     for (const name of trackedSavedNames.splice(0).reverse()) {
-      await store.deleteSharesOf(name);
       await store.deleteSavedSnapshot(name);
     }
 
