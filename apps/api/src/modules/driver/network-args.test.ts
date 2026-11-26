@@ -6,7 +6,7 @@
  * rots, so the mapping itself is tested here: profile -> flags.
  */
 import { describe, expect, test } from "bun:test";
-import { networkArgsFor, rootDiskArgsFor } from "./microsandbox.ts";
+import { networkArgsFor, restoreNetworkArgsFor, rootDiskArgsFor } from "./microsandbox.ts";
 
 const base = {
   profile: "public",
@@ -63,6 +63,77 @@ describe("SPACES_NET -> msb flags", () => {
       "1.1.1.1",
     ]);
     expect(args).not.toContain("--net-default-ingress");
+  });
+});
+
+describe("per-sandbox network policy -> msb flags", () => {
+  test("default policy delegates to runtime environment", () => {
+    expect(
+      networkArgsFor({
+        ...base,
+        rules: ["allow@192.168.1.50"],
+        policy: { mode: "default", allow: [] },
+      }),
+    ).toEqual(["--net", "public", "--net-rule", "allow@192.168.1.50"]);
+  });
+
+  test("deny air-gaps the sandbox with --no-net", () => {
+    expect(networkArgsFor({ ...base, policy: { mode: "deny", allow: [] } })).toEqual(["--no-net"]);
+    expect(restoreNetworkArgsFor({ mode: "deny", allow: [] })).toEqual(["--no-net"]);
+  });
+
+  test("open forces public profile without private LAN rules", () => {
+    expect(
+      networkArgsFor({
+        ...base,
+        profile: "all",
+        rules: ["allow@192.168.1.50"],
+        dns: "1.1.1.1",
+        policy: { mode: "open", allow: [] },
+      }),
+    ).toEqual(["--net", "public", "--dns-nameserver", "1.1.1.1"]);
+
+    expect(restoreNetworkArgsFor({ mode: "open", allow: [] })).toEqual([
+      "--net-default",
+      "deny",
+      "--net-rule",
+      "allow@public",
+      "--net-rule",
+      "allow@dns",
+    ]);
+  });
+
+  test("allow builds --no-net + allow@dns + port 443/80 for domains and raw allow for public IPs", () => {
+    expect(
+      networkArgsFor({
+        ...base,
+        dns: "1.1.1.1",
+        policy: { mode: "allow", allow: ["github.com", "*.npmjs.org", "1.1.1.1"] },
+      }),
+    ).toEqual([
+      "--no-net",
+      "--net-rule",
+      "allow@dns",
+      "--dns-nameserver",
+      "1.1.1.1",
+      "--net-rule",
+      "allow@github.com:tcp:443",
+      "--net-rule",
+      "allow@github.com:tcp:80",
+      "--net-rule",
+      "allow@*.npmjs.org:tcp:443",
+      "--net-rule",
+      "allow@*.npmjs.org:tcp:80",
+      "--net-rule",
+      "allow@1.1.1.1",
+    ]);
+
+    expect(
+      networkArgsFor({
+        ...base,
+        policy: { mode: "allow", allow: ["1.1.1.1"] },
+      }),
+    ).toEqual(["--no-net", "--net-rule", "allow@1.1.1.1"]);
   });
 });
 

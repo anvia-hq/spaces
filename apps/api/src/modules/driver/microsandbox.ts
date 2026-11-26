@@ -1,4 +1,5 @@
 import { SANDBOX_WORKDIR } from "@spaces/shared/files";
+import { classifyNetworkEntry, type NetworkPolicy } from "@spaces/shared/sandbox";
 import { config } from "../../config.ts";
 import type { FileEntry, FileMatch } from "@spaces/shared/files";
 import type {
@@ -203,7 +204,7 @@ export class MicrosandboxDriver implements SandboxDriver {
       "-m",
       memory,
       ...rootDisk,
-      ...this.networkArgs(),
+      ...this.networkArgs(o.network),
       ...this.portArgs(o.ports ?? []),
       "--replace",
       "--quiet",
@@ -251,6 +252,7 @@ export class MicrosandboxDriver implements SandboxDriver {
           cpus,
           "-m",
           memory,
+          ...restoreNetworkArgsFor(o.network),
           ...this.portArgs(o.ports ?? []),
         ],
         this.timeoutMs,
@@ -359,13 +361,14 @@ export class MicrosandboxDriver implements SandboxDriver {
    * device at all, which is why SSH, package installs and port publishing were
    * unreachable.
    */
-  private networkArgs(): string[] {
+  private networkArgs(policy?: NetworkPolicy): string[] {
     return networkArgsFor({
       profile: config.netProfile,
       rules: config.netRules,
       defaultEgress: config.netDefaultEgress,
       defaultIngress: config.netDefaultIngress,
       dns: config.netDns,
+      policy,
     });
   }
 
@@ -1088,13 +1091,76 @@ export function rootDiskArgsFor(size: CreateOptions["size"]) {
   return ["--root-disk", `${size.diskGb}G`];
 }
 
+function allowRulesFor(entries: string[]): { rules: string[]; needsDns: boolean } {
+  const rules: string[] = [];
+  let needsDns = false;
+
+  for (const entry of entries) {
+    const kind = classifyNetworkEntry(entry);
+
+    if (kind === "domain") {
+      needsDns = true;
+      rules.push(`allow@${entry}:tcp:443`, `allow@${entry}:tcp:80`);
+    } else if (kind === "ip") {
+      rules.push(`allow@${entry}`);
+    }
+  }
+
+  return { rules, needsDns };
+}
+
+export function restoreNetworkArgsFor(policy?: NetworkPolicy): string[] {
+  if (!policy || policy.mode === "default") return [];
+
+  if (policy.mode === "deny") return ["--no-net"];
+
+  if (policy.mode === "open") {
+    return ["--net-default", "deny", "--net-rule", "allow@public", "--net-rule", "allow@dns"];
+  }
+
+  const { rules, needsDns } = allowRulesFor(policy.allow);
+  const args = ["--no-net"];
+
+  if (needsDns) args.push("--net-rule", "allow@dns");
+
+  for (const rule of rules) args.push("--net-rule", rule);
+
+  return args;
+}
+
 export function networkArgsFor(o: {
   profile: string;
   rules: string[];
   defaultEgress: string;
   defaultIngress: string;
   dns: string;
+  policy?: NetworkPolicy;
 }): string[] {
+  if (o.policy && o.policy.mode !== "default") {
+    if (o.policy.mode === "deny") return ["--no-net"];
+
+    if (o.policy.mode === "open") {
+      const args = ["--net", "public"];
+
+      if (o.dns) args.push("--dns-nameserver", o.dns);
+
+      return args;
+    }
+
+    const { rules, needsDns } = allowRulesFor(o.policy.allow);
+    const args = ["--no-net"];
+
+    if (needsDns) {
+      args.push("--net-rule", "allow@dns");
+
+      if (o.dns) args.push("--dns-nameserver", o.dns);
+    }
+
+    for (const rule of rules) args.push("--net-rule", rule);
+
+    return args;
+  }
+
   const profile = o.profile.trim();
 
   if (!profile || profile === "none") return ["--no-net"];

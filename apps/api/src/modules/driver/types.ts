@@ -1,4 +1,4 @@
-import type { SandboxType } from "@spaces/shared/sandbox";
+import type { NetworkPolicy, SandboxType } from "@spaces/shared/sandbox";
 import type { FileEntry, FileMatch } from "@spaces/shared/files";
 import type { DriverMethod } from "@spaces/shared/runtime";
 
@@ -68,6 +68,7 @@ export interface CreateOptions {
   /** Boot from this snapshot/disk image instead of the base image. */
   fromRef?: string;
   env?: Record<string, string>;
+  network?: NetworkPolicy;
 }
 
 export interface ProxyRequest {
