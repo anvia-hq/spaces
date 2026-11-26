@@ -90,17 +90,17 @@ all native `<form>`, `<fieldset>`, `<button>`, `<input>`, and `<label>` elements
 ## Consequences
 
 - The gate is fast (sub-second lint) and identical to the one the rules were written for, so a rule that
-  is wrong for both repositories is fixed once and ported. Cross-repo differences are the three named
-  exceptions, all in one file, all with a reason.
+  is wrong for both repositories is fixed once and ported. With the 2026-11-26 update, there are zero
+  deferred rules or cross-repo rule exceptions.
 - Conditional spreads and nested ternaries get spelled out explicitly. That is a real readability cost
   in a few response builders (`if (x) { body.y = z }` instead of one spread) and pays for itself the
   first time a key is silently dropped by a falsy spread.
 - The formatter's diff touches nearly every file. Reviewing it by `git blame` is painful for one
   commit and free afterwards; `--ignore-rev` is the escape hatch.
-- Comments survive this phase, so the repo still reads as it did. When the rule does land, the diff
-  will be a pure deletion, easy to review and easy to argue with.
-- No `no-native-primitives` means the console can keep its pre-existing native elements until the UI
-  pass that replaces them deliberately.
+- TypeScript source files stay comment-free (`spaces/no-comments` + `no-inline-comments`); rationale
+  lives in `docs/decision/` and `docs/internals.md`.
+- Console components outside `apps/web/src/components/ui/` use Base UI wrappers (`Form`, `Fieldset`,
+  `Button`, `Input`, `Label`) instead of raw HTML form primitives (`spaces/no-native-primitives`).
 
 ## Alternatives ruled out
 

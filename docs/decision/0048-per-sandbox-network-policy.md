@@ -20,21 +20,30 @@ created sandbox, and `msb fork` inherits its parent's network configuration.
 
 1. **Per-sandbox `network` policy on create:**
    - `POST /sandboxes` accepts an optional `network: { mode, allow? }`:
-     - `default`: follow the runtime's configured `SPACES_NET` / `SPACES_NET_RULES`.
-     - `open`: public internet allowed, private/LAN denied (`--net public`).
-     - `deny`: no outbound network (`--no-net`).
-     - `allow`: deny by default (`--no-net`) and allow only the 1–100 listed entries. Domain and
-       wildcard (`*.example.com`) entries allow TCP 443 and TCP 80 and automatically add
-       `allow@dns`; public IP/CIDR entries allow traffic to that destination.
-   - Private, loopback, link-local, CGNAT/tailnet (`100.64.0.0/10`), and multicast IPs/CIDRs are
-     rejected in per-sandbox `allow` lists so a sandbox caller cannot weaken a runtime's LAN
-     isolation.
-2. **Persistence and read route:**
+     - `default`: follow the runtime's configured `SPACES_NET` / `SPACES_NET_RULES` (including on
+       snapshot restore, where explicit runtime flags replace any policy baked into the snapshot).
+     - `open`: public internet allowed, private/LAN denied (`--net public` on create; explicit
+       public + DNS + ingress rules on restore).
+     - `deny`: full network air-gap (`--no-net`). Commands and files still work over vsock;
+       outbound egress and inbound published ports/SSH are disabled.
+     - `allow`: deny egress by default while keeping published-port ingress open
+       (`--net-default-egress deny --net-default-ingress allow` on create; `--net-default deny`
+       plus explicit ingress allow rules on restore) and allow only the 1–100 listed entries.
+       Domain and wildcard (`*.example.com`) entries allow TCP 443 and TCP 80 and automatically
+       add `allow@dns`; public IPv4/IPv6/CIDR entries allow traffic to that destination (with IPv6
+       targets bracketed as `[<addr>]` for `msb`).
+   - Private, loopback, link-local, CGNAT/tailnet (`100.64.0.0/10`), multicast, documentation,
+     6to4, NAT64, IPv4-mapped IPv6, non-global IPv6, and overlapping supernet CIDRs are rejected
+     with `400 invalid_network_policy` so a sandbox caller cannot weaken a runtime's LAN isolation.
+2. **Persistence, capabilities, and fork semantics:**
    - The policy is stored in `sandboxes.network_policy`, surfaced on `Sandbox.network`, and
      readable at `GET /sandboxes/{id}/network`.
-   - `POST /sandboxes/{id}/fork` inherits the parent sandbox's policy and answers
-     `409 network_policy_unsupported` if a caller requests a different policy on fork (use a saved
-     snapshot restore to boot a disk under a new policy).
+   - `POST /sandboxes/{id}/fork` — and `POST /sandboxes` with `from` naming a live sandbox —
+     inherits the parent sandbox's policy and answers `409 network_policy_unsupported` if a caller
+     requests a different policy (use a saved snapshot restore to boot a disk under a new policy).
+   - Runtime agents advertise `capabilities.networkPolicy: true`; scheduling a non-`default`
+     policy onto an older agent without that capability fails closed with
+     `409 network_policy_unsupported`.
 3. **No live `PUT /sandboxes/{id}/network` yet:**
    - Because `msb modify` does not support live network rule replacement, `PUT` is intentionally
      omitted rather than silently ignored or faked. When `msb modify` gains network flags, `PUT`

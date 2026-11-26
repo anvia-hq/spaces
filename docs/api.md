@@ -14,8 +14,8 @@ runtime's driver and `runtimes: { online, total }`. `GET /runtime/connect` also 
 is the WebSocket a [runtime agent](#runtimes) dials, and it takes a runtime token, not an API key.
 
 The surface covers sandboxes, files, commands, snapshots, ports, SSH, usage and the machine sizes a
-sandbox can be created at. Routes for a capability this deployment does not run are absent or answer
-`501` — see [scope](#scope).
+sandbox can be created at. Routes for capabilities this deployment does not run are absent and answer
+`404` — see [scope](#scope).
 
 ## Request conventions
 
@@ -53,25 +53,27 @@ Every field `POST /sandboxes` accepts is acted on (decisions
 [0047](./decision/0047-synchronous-create-and-create-time-provisioning.md),
 [0048](./decision/0048-per-sandbox-network-policy.md)):
 
-| Field                        | Behaviour                                                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`, `ttlSeconds`, `name` | `ttlSeconds: null` disables auto-stop (default `3600`); `type` names an active preset from `/machine-sizes`                           |
-| `labels`, `env`              | `labels` (≤20) filterable via `GET /sandboxes?label=k=v`; `env` (≤100) injected into commands                                         |
-| `from`                       | A live sandbox id (fork its disk) or a saved snapshot name (restore its disk). Never a silent cold boot                               |
-| `runtime`                    | A runtime id or name to create on. Omitted, the control plane picks one; see [runtimes](#runtimes)                                    |
-| `wait`, `waitTimeoutSeconds` | `wait: true` blocks up to `waitTimeoutSeconds` (1–120, default `30`) and answers `201` with a `ready` sandbox, or `202` on timeout    |
-| `hostedPorts`                | Up to 50 guest ports reserved before initial boot (`explicit: true`), avoiding the post-boot restart penalty                          |
-| `files`                      | Up to 32 files (≤5 MiB each, ≤20 MiB total) under `/home/user` or `/tmp`, written as `user` before the sandbox becomes `ready`        |
-| `setupScript`                | Runs once after `ready` as `user`; status and failure tail are surfaced on `Sandbox.setupStatus` / `Sandbox.setupError` and `/events` |
-| `network`                    | Per-sandbox egress policy: `{ mode: "default" \| "open" \| "deny" \| "allow", allow?: string[] }`; private IPs/CIDRs are rejected     |
+| Field                        | Behaviour                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `type`, `ttlSeconds`, `name` | `ttlSeconds: null` disables auto-stop (default `3600`); `type` names an active preset from `/machine-sizes`                                                                                                                                                                                                                                |
+| `labels`, `env`              | `labels` (≤20) filterable via `GET /sandboxes?label=k=v`; `env` (≤100) injected into commands                                                                                                                                                                                                                                              |
+| `from`                       | A live sandbox id (fork its disk, inheriting its `network` policy) or a saved snapshot name (restore its disk). Never a silent cold boot                                                                                                                                                                                                   |
+| `runtime`                    | A runtime id or name to create on. Omitted, the control plane picks one; see [runtimes](#runtimes)                                                                                                                                                                                                                                         |
+| `wait`, `waitTimeoutSeconds` | `wait: true` blocks up to `waitTimeoutSeconds` (1–120, default `30`) and answers `201` with a `ready` sandbox, or `202` on timeout                                                                                                                                                                                                         |
+| `hostedPorts`                | Up to 50 guest ports reserved before initial boot (`explicit: true`), avoiding the post-boot restart penalty                                                                                                                                                                                                                               |
+| `files`                      | Up to 32 files (≤5 MiB each, ≤20 MiB total) under `/home/user` or `/tmp`, written as `user` before the sandbox becomes `ready`                                                                                                                                                                                                             |
+| `setupScript`                | Runs once after `ready` as `user`; status and failure tail are surfaced on `Sandbox.setupStatus` / `Sandbox.setupError` and `/events`                                                                                                                                                                                                      |
+| `network`                    | Per-sandbox network policy: `{ mode: "default" \| "open" \| "deny" \| "allow", allow?: string[] }`; private/reserved IPs & CIDRs are rejected (`400 invalid_network_policy`). `deny` air-gaps the guest (`--no-net`; `exec` and `files` still work over vsock); `allow` denies egress by default while keeping published-port ingress open |
 
 `POST /sandboxes/{id}/resume` accepts `ttlSeconds` (resets the auto-stop timer from now), `type`
 (moves the sandbox to another machine size), `name`, and `env` (replaces stored env).
-`POST /sandboxes/{id}/fork` inherits the parent's `env` (unless `env` is supplied) and `network`
-policy (passing a conflicting `network` answers `409 network_policy_unsupported`).
+`POST /sandboxes/{id}/fork` — and `POST /sandboxes` with `from` pointing at a live sandbox id —
+inherits the parent's `env` (unless `env` is supplied) and `network` policy (passing a conflicting
+`network` answers `409 network_policy_unsupported`).
 
 **Creating from a saved snapshot.** `from` may name a saved snapshot the caller can see. The new
-sandbox gets its own `type`, `env`, `labels`, `ttlSeconds` and `setupScript`, and boots from a copy of
+sandbox gets its own `type`, `env`, `labels`, `ttlSeconds`, `network`, `hostedPorts`, `files`, and
+`setupScript`, and boots from a copy of
 the saved disk; the saved snapshot and its artifact are not consumed. An unknown or inaccessible name,
 a `bsh_` code, or a missing artifact answers `404 snapshot_not_found`; a saved snapshot still `saving`
 or `failed`, or one whose artifact is not ready, answers `409 snapshot_not_ready`. Spaces imposes no
@@ -292,13 +294,17 @@ the ready guest image — see [Guest image](../DEVELOPMENT.md#guest-image).
 
 | Method   | Path                          | Notes                                                      |
 | -------- | ----------------------------- | ---------------------------------------------------------- |
+| `GET`    | `/sandboxes/{id}/network`     | Active per-sandbox network policy                          |
 | `POST`   | `/sandboxes/{id}/host`        | Publish a guest port, get a proxied URL                    |
 | `DELETE` | `/sandboxes/{id}/host/{port}` | Unpublish                                                  |
 | `GET`    | `/sandboxes/{id}/ports`       | Published ports — **extension**: no other route lists them |
 | `POST`   | `/sandboxes/{id}/sshkey`      | Authorize a key, start sshd, publish port 22               |
 
-Guest egress follows `SPACES_NET` (default `public`: public addresses reachable, private ones denied).
-To reach a LAN or tailnet service either lift filtering with `SPACES_NET=all`, or allow one target:
+By default (`network.mode: "default"`), guest egress follows the runtime's `SPACES_NET` (default
+`public`: public addresses reachable, private ones denied) and `SPACES_NET_RULES`. Individual
+sandboxes may override this at create or snapshot-restore time via `network` (`open`, `deny`, or
+`allow`; decision [0048](./decision/0048-per-sandbox-network-policy.md)). To reach a LAN or tailnet
+service on a runtime, either lift filtering with `SPACES_NET=all` or allow one target:
 
 ```bash
 SPACES_NET_RULES='allow@192.168.1.50,allow@100.101.102.103:tcp:5432'
