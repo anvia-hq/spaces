@@ -5,12 +5,17 @@
 # user, and makes each one reachable from the non-interactive shell the API runs:
 #
 #   Node.js 26 (nvm, default alias) + npm     /home/user/.nvm
+#   pnpm                                      /home/user/.nvm/current/bin
 #   bun                                       /home/user/.bun       (BUN_INSTALL)
 #   uv + uvx                                  /home/user/.local/bin
 #   GitHub CLI (gh)                           /usr/local/bin/gh     (no token)
 #   Playwright + Chromium                     playwright global npm, browsers in
 #                                             /opt/ms-playwright
-#   build-essential, python3 + venv           every native addon and uv venv
+#   build-essential, pkg-config, libssl-dev   native addons and venv builds
+#   python3 + pip + venv                      Python tooling alongside uv
+#   ripgrep (rg), fd, tmux, ffmpeg, sqlite3,  everyday CLI and media utilities
+#   openssh-client, git-lfs, zip/xz/zstd,
+#   file, tree
 #
 # Why a second Dockerfile rather than a stage in the base: the base is what
 # machines without the toolchain want and is the documented "ready image", and a
@@ -31,6 +36,7 @@ FROM ${BASE_IMAGE}
 # Node and nvm are pinned by version; nvm's installer is pinned by checksum as
 # well, because it is fetched over the network and then executed.
 ARG NODE_VERSION=26.13.1
+ARG PNPM_VERSION=10
 ARG NVM_VERSION=v0.41.0
 ARG NVM_SHA256SUM=045932fe05f0d4247c946f2ec0ec4026dbfd8ce88a5f67ea28d8ea833227f48b
 # gh is pinned by version; its tarball is checked against cli/cli's own
@@ -54,14 +60,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 #   unzip  the nvm installer and Playwright's browser zips need it
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      build-essential \
-      python3 python3-venv python3-dev \
+      build-essential pkg-config libssl-dev \
+      python3 python3-pip python3-venv python3-dev \
+      openssh-client ripgrep fd-find git-lfs sqlite3 tmux ffmpeg \
+      zip unzip xz-utils zstd file tree \
       libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
       libcups2t64 libdrm2 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 \
       libxfixes3 libxrandr2 libpango-1.0-0 libcairo2 libasound2t64 \
       libglib2.0-0t64 libexpat1 \
       fonts-liberation fonts-noto-color-emoji \
-      unzip \
+ && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
  && rm -rf /var/lib/apt/lists/*
 
 # gh, from the release tarball checked against cli/cli's checksums, rather than
@@ -156,6 +164,10 @@ RUN printf '%s\n' \
  && dash -lc 'command -v node' \
  && bash -lc 'command -v node'
 
+# pnpm: installed globally under nvm's default Node so it stays on PATH in all shells.
+RUN npm install -g "pnpm@${PNPM_VERSION}" \
+ && pnpm --version
+
 # bun: the official installer drops the binary in $BUN_INSTALL/bin.
 RUN curl -fsSL https://bun.sh/install | bash \
  && bun -v
@@ -204,8 +216,8 @@ RUN sudo mkdir -p /opt/ms-playwright \
 RUN sudo chmod 0555 / \
  && sudo grep '^user:' /etc/shadow \
  && sudo chmod 0755 / \
- && sh -lc 'command -v node bun uv uvx gh playwright' \
- && sh -lc 'node -v && bun -v && uv --version && gh --version' \
+ && sh -lc 'command -v node npm pnpm bun uv uvx pip3 gh playwright rg fd ssh git-lfs sqlite3 tmux ffmpeg zip xz zstd file tree' \
+ && sh -lc 'node -v && pnpm -v && bun -v && uv --version && gh --version && rg --version && fd --version && tmux -V && ffmpeg -version | head -n 1' \
  && playwright install-deps --dry-run chromium
 
 USER root
