@@ -39,14 +39,14 @@ export function PortsPanel({ sandboxId, live }: { sandboxId: string; live: boole
                 <Button
                   key={suggestion}
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="xs"
                   disabled={!live}
                   onClick={() => {
                     setPort(String(suggestion));
                     void host(suggestion);
                   }}
-                  className="h-auto rounded border-border/80 bg-card/60 px-2 py-0.5 text-base font-normal text-muted-foreground hover:border-border hover:text-foreground"
+                  className="h-auto rounded border border-border/80 bg-card/60 px-2 py-0.5 text-base font-normal text-muted-foreground hover:border-border hover:bg-card hover:text-foreground"
                 >
                   :{suggestion}
                 </Button>

@@ -29,13 +29,29 @@ export function useSandboxes() {
     [refresh],
   );
 
-  const create = (input: {
-    type: SandboxType;
-    ttlSeconds: number | null;
-    name?: string;
-    runtime?: string;
-    network?: NetworkPolicy;
-  }) => act("create", () => api.createSandbox(input), "Sandbox created").then(() => undefined);
+  const create = useCallback(
+    async (input: {
+      type: SandboxType;
+      ttlSeconds: number | null;
+      name?: string;
+      runtime?: string;
+      network?: NetworkPolicy;
+    }): Promise<boolean> => {
+      setBusy("create");
+      try {
+        await api.createSandbox(input);
+        await refresh();
+        toast.success("Sandbox created");
+        return true;
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : String(e));
+        return false;
+      } finally {
+        setBusy(null);
+      }
+    },
+    [refresh],
+  );
 
   return { poll, rows, live, busy, act, create };
 }

@@ -123,7 +123,7 @@ export function SnapshotsPanel({ sandboxId, live }: { sandboxId: string; live: b
                     trigger={<Trash2 className="size-3.5" />}
                     triggerLabel={`Delete ${snapshot.name}`}
                     title={`Delete ${snapshot.name}?`}
-                    description="The frozen disk and every share code pointing at it are destroyed."
+                    description="The frozen disk for this snapshot is permanently destroyed."
                     confirmLabel="Delete snapshot"
                     destructive
                     busy={busy === `del:${snapshot.name}`}

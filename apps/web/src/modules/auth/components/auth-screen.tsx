@@ -136,7 +136,7 @@ export function AuthScreen() {
             <Button
               type="button"
               variant="link"
-              className="h-auto p-0 text-base font-medium text-foreground"
+              className="h-auto border-0 p-0 text-base font-medium text-foreground"
               onClick={() => {
                 setMode(signingUp ? "sign-in" : "sign-up");
                 setError(null);

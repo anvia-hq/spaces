@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import type { MachineSize, NetworkMode, NetworkPolicy, SandboxType } from "@spaces/shared/sandbox";
+import {
+  classifyNetworkEntry,
+  isPrivateIpOrCidr,
+  type MachineSize,
+  type NetworkMode,
+  type NetworkPolicy,
+  type SandboxType,
+} from "@spaces/shared/sandbox";
 import { Check } from "lucide-react";
 import { Segmented } from "@/components/console/segmented";
 import { Button } from "@/components/ui/button";
@@ -34,6 +41,24 @@ const NETWORK_CHOICES: { value: NetworkMode; label: string }[] = [
   { value: "allow", label: "Allowlist" },
 ];
 
+function allowlistError(entries: string[]): string | null {
+  if (entries.length > 100) return "At most 100 entries are allowed.";
+
+  for (const entry of entries) {
+    const kind = classifyNetworkEntry(entry);
+
+    if (!kind) {
+      return `Invalid entry "${entry}" — use a domain, *.domain, or public IP/CIDR.`;
+    }
+
+    if (kind === "ip" && isPrivateIpOrCidr(entry)) {
+      return `Private or reserved address "${entry}" is not allowed.`;
+    }
+  }
+
+  return null;
+}
+
 export function CreateSandboxDialog({
   open,
   onOpenChange,
@@ -53,7 +78,7 @@ export function CreateSandboxDialog({
     name?: string;
     runtime?: string;
     network?: NetworkPolicy;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
 }) {
   const first = sizes[0]?.name;
   const [type, setType] = useState<SandboxType | undefined>(first);
@@ -78,11 +103,19 @@ export function CreateSandboxDialog({
     setAllowText("");
   }
 
+  function close() {
+    if (!busy) reset();
+
+    onOpenChange(false);
+  }
+
   const allowEntries = allowText.split(/[\s,]+/).flatMap((item) => {
     const trimmed = item.trim();
     return trimmed ? [trimmed] : [];
   });
-  const allowInvalid = networkMode === "allow" && allowEntries.length === 0;
+  const allowError = networkMode === "allow" ? allowlistError(allowEntries) : null;
+  const allowInvalid =
+    networkMode === "allow" && (allowEntries.length === 0 || allowError !== null);
 
   function submit() {
     if (busy || !type || allowInvalid) return;
@@ -109,7 +142,9 @@ export function CreateSandboxDialog({
           : { mode: networkMode, allow: [] };
     }
 
-    void onCreate(input).then(() => {
+    void onCreate(input).then((ok) => {
+      if (!ok) return;
+
       reset();
       onOpenChange(false);
     });
@@ -119,9 +154,8 @@ export function CreateSandboxDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        onOpenChange(next);
-
-        if (!next && !busy) reset();
+        if (!next) close();
+        else onOpenChange(true);
       }}
     >
       <DialogContent className="sm:max-w-[560px]">
@@ -152,15 +186,15 @@ export function CreateSandboxDialog({
                   <Button
                     key={size.name}
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     role="radio"
                     aria-checked={active}
                     onClick={() => setType(size.name)}
                     className={cn(
-                      "h-auto flex-col items-stretch justify-start gap-1 rounded-lg px-3 py-2.5 text-left font-normal whitespace-normal",
+                      "h-auto flex-col items-stretch justify-start gap-1 rounded-lg border px-3 py-2.5 text-left font-normal whitespace-normal",
                       active
                         ? "border-primary bg-primary/10 hover:bg-primary/10"
-                        : "border-border bg-card/60 hover:border-border hover:text-foreground",
+                        : "border-border bg-card/60 hover:border-border hover:bg-card/60 hover:text-foreground",
                     )}
                   >
                     <span className="flex items-center justify-between gap-2">
@@ -207,14 +241,22 @@ export function CreateSandboxDialog({
               onChange={(next) => setNetworkMode(next)}
             />
             {networkMode === "allow" && (
-              <Input
-                className="text-base"
-                value={allowText}
-                placeholder="github.com, *.npmjs.org"
-                aria-label="Allowed domains or public IPs"
-                spellCheck={false}
-                onChange={(event) => setAllowText(event.target.value)}
-              />
+              <div className="flex flex-col gap-1.5">
+                <Input
+                  className="text-base"
+                  value={allowText}
+                  placeholder="github.com, *.npmjs.org"
+                  aria-label="Allowed domains or public IPs"
+                  aria-invalid={allowError !== null}
+                  spellCheck={false}
+                  onChange={(event) => setAllowText(event.target.value)}
+                />
+                {allowError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {allowError}
+                  </p>
+                )}
+              </div>
             )}
           </Fieldset>
 
@@ -256,7 +298,7 @@ export function CreateSandboxDialog({
         </Form>
 
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="ghost" size="sm" onClick={close} disabled={busy}>
             Cancel
           </Button>
           <Button

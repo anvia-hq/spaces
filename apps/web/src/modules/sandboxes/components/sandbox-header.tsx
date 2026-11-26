@@ -66,13 +66,13 @@ export function SandboxHeader({
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => {
                 void navigator.clipboard.writeText(sandbox.id);
                 toast.success("Sandbox ID copied");
               }}
-              className="group h-auto gap-1.5 rounded-md border-border/80 bg-card/60 px-2 py-1 text-base font-normal text-muted-foreground hover:text-foreground"
+              className="group h-auto gap-1.5 rounded-md border border-border/80 bg-card/60 px-2 py-1 text-base font-normal text-muted-foreground hover:bg-card hover:text-foreground"
             >
               {sandbox.id}
               <Copy className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
