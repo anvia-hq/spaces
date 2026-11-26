@@ -106,29 +106,3 @@ export async function sandboxUsage(id: string, query: { since?: string; until?: 
     running: LIVE_STATES.includes(sandbox.state) && (await store.pendingStop(id)) === null,
   };
 }
-
-/**
- * AI usage. This server proxies no model traffic, so the meter is empty rather
- * than missing: a client that polls it keeps working.
- */
-export async function sandboxAiUsage(id: string) {
-  await requireSandbox(id);
-  const emptyTotals = {
-    requests: 0,
-    errors: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-  };
-  return {
-    sandboxId: id,
-    blocked: false,
-    proxied: false,
-    credentialProfileId: null,
-    since: new Date().toISOString().slice(0, 10),
-    usage: [],
-    totals: emptyTotals,
-    dollars: 0,
-  };
-}

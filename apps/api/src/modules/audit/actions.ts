@@ -105,16 +105,6 @@ const ROUTES: Record<string, RouteAction> = {
     targetType: "snapshot",
     targetParam: "name",
   },
-  "POST /saved-snapshots/:name/shares": {
-    action: "snapshot.share_create",
-    targetType: "snapshot",
-    targetParam: "name",
-  },
-  "DELETE /saved-snapshots/:name/shares/:shareId": {
-    action: "snapshot.share_revoke",
-    targetType: "snapshot",
-    targetParam: "name",
-  },
   "DELETE /snapshots/:snapshotId": {
     action: "snapshot.delete",
     targetType: "snapshot",

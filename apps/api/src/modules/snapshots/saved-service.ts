@@ -1,7 +1,4 @@
-import { createHash } from "node:crypto";
-import { newId } from "@spaces/shared/errors";
-import { iso, store } from "../../db.ts";
-import type { SnapshotShareRow } from "../../db.ts";
+import { store } from "../../db.ts";
 import { ServiceError } from "../../errors.ts";
 import { currentOwnerId } from "../../scope.ts";
 import { driverFor } from "../driver/service.ts";
@@ -164,53 +161,6 @@ export async function deleteSavedSnapshot(name: string) {
     await store.removeSnapshot(row.snapshotId);
   }
 
-  await store.deleteSharesOf(name);
   await store.deleteSavedSnapshot(name);
   return { name, status: "deleted" as const };
-}
-
-export function shapeShare(row: SnapshotShareRow) {
-  return {
-    id: row.id,
-    codePrefix: row.codePrefix,
-    status: row.revokedAt ? ("revoked" as const) : ("active" as const),
-    useCount: row.useCount,
-    lastUsedAt: iso(row.lastUsedAt),
-    revokedAt: iso(row.revokedAt),
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-export async function listSnapshotShares(name: string) {
-  await requireSavedSnapshot(name);
-  return (await store.listShares(name)).map(shapeShare);
-}
-
-/** A share code is shown once; only its hash is kept. */
-export async function createSnapshotShare(name: string) {
-  await requireSavedSnapshot(name);
-
-  const shareId = newId("shr");
-  const code = `bsh_${Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("hex")}`;
-  await store.insertShare({
-    id: shareId,
-    name,
-    codeHash: createHash("sha256").update(code).digest("hex"),
-    codePrefix: code.slice(0, 12),
-    createdAt: new Date().toISOString(),
-  });
-
-  return { name, shareCode: code, share: shapeShare((await store.getShare(shareId))!) };
-}
-
-export async function revokeSnapshotShare(name: string, shareId: string) {
-  await requireSavedSnapshot(name);
-  const share = await store.getShare(shareId);
-
-  if (!share || share.name !== name) {
-    throw new ServiceError("not_found", "no such share");
-  }
-
-  await store.revokeShare(share.id, new Date().toISOString());
-  return shapeShare((await store.getShare(share.id))!);
 }
