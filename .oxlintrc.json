@@ -15,6 +15,10 @@
   ],
   "jsPlugins": ["./tooling/oxlint/spaces-plugin.mjs"],
   "rules": {
+    "spaces/no-comments": "error",
+    "no-inline-comments": "error",
+    "spaces/no-atom-import": "error",
+    "spaces/no-native-primitives": "error",
     "spaces/no-conditional-spread": "error",
     "spaces/no-barrel-file": "error",
     "spaces/no-base-ui-outside-ui": "error",

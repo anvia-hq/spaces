@@ -51,9 +51,9 @@ and every request is rejected. Use `bun run test`.
 - **No barrel files.** An `index.ts` that only re-exports is forbidden; import from the exact file.
   `packages/shared` is imported by subpath (`@spaces/shared/sandbox`, `/files`, `/errors`).
 - **oxlint and oxfmt gate every pull request** (`.github/workflows/ci.yml`). The rules are ours, in
-  `tooling/oxlint/` — fix the code, do not edit a rule to make a violation disappear unless the rule is
-  wrong for both repositories, and then port the fix to the other one. `docs/decision/0029` lists the
-  three rules not enabled here and why.
+  `tooling/oxlint/` — every rule is enabled with no deferrals. Fix the code, do not edit or disable
+  a rule to make a violation disappear unless the rule is wrong for both repositories, and then port
+  the fix to the other one. See `docs/decision/0029`.
 - **Types live in `types.ts`.** Every exported `type`/`interface` belongs to its module's `types.ts`,
   imported with `import type`. Component `Props` and zod-inferred types stay beside their code.
 - **Never edit generated files:** `apps/web/src/routeTree.gen.ts` and anything in
@@ -158,11 +158,3 @@ src/lib/            singletons and thin clients: api.ts, format.ts, use-poll.ts,
   console in a browser when you touched it.
 - Do not commit, push, merge or release unless asked.
 - Record a significant choice in `docs/decision/` in the same change.
-
-## Known debt
-
-- `spaces/no-comments` and `no-inline-comments` are not enabled yet: spaces keeps its "why" next to the
-  code (919 comment lines). After Phase 5, in a pass with nothing else in it, move the load-bearing
-  notes into `docs/decision/` and `docs/internals.md`, then turn the rules on. See decision 0029.
-- `spaces/no-native-primitives` is off until the console's native `<button>`/`<input>` elements are
-  replaced on purpose; it is a UI change, not a lint fix.

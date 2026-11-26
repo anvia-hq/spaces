@@ -80,6 +80,13 @@ pass with nothing else in it, move the load-bearing "why" into `docs/decision/` 
 per area, then turn `spaces/no-comments` and `no-inline-comments` on. `AGENTS.md` says so, so it is not
 forgotten.
 
+**Update (2026-11-26):** Every rule in `tooling/oxlint/` is now enabled in `.oxlintrc.json` with
+no deferrals: `spaces/no-comments`, `no-inline-comments`, `spaces/no-atom-import`, and
+`spaces/no-native-primitives` are all `error`. All remaining `.ts`/`.tsx` comments were removed and
+all native `<form>`, `<fieldset>`, `<button>`, `<input>`, and `<label>` elements outside
+`apps/web/src/components/ui/` were replaced with Base UI wrappers (`Form`, `Fieldset`, `Button`,
+`Input`, `Label`).
+
 ## Consequences
 
 - The gate is fast (sub-second lint) and identical to the one the rules were written for, so a rule that
